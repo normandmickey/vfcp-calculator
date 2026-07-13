@@ -1,5 +1,7 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+import csv
+import io
+from fastapi import FastAPI, Request, UploadFile, File, Query
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, field_validator
 from datetime import date, timedelta
 from typing import Optional
@@ -20,9 +22,8 @@ VFCP_RATES = {
 
 
 def get_rate_for_date(d: date) -> float:
-    """Look up the DOL mid-term rate for a given month."""
     if d.year not in VFCP_RATES:
-        return 1.70  # fallback
+        return 1.70
     rate = VFCP_RATES[d.year].get(d.month)
     if rate is None:
         return 1.70
@@ -30,11 +31,6 @@ def get_rate_for_date(d: date) -> float:
 
 
 def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use_pro_rata: bool = True) -> list[dict]:
-    """
-    Calculate lost earnings for a single contribution.
-    If use_pro_rata is True, month-by-month compounding is used (DOL preferred).
-    Returns a list of monthly breakdown rows.
-    """
     results = []
     balance = amount
     current = due_date
@@ -42,7 +38,6 @@ def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use
     while current < deposit_date:
         year = current.year
         month = current.month
-        # days in this month
         if month == 12:
             next_month = date(year + 1, 1, 1)
         else:
@@ -69,7 +64,6 @@ def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use
         else:
             break
 
-    # Simple fallback if no pro-rata
     if not results:
         total_days = (deposit_date - due_date).days
         rate = get_rate_for_date(due_date)
@@ -86,13 +80,26 @@ def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use
     return results
 
 
+def compute_single(amount: float, due: date, deposit: date) -> dict:
+    breakdown = compute_lost_earnings(amount, due, deposit)
+    lost = round(sum(r["earnings"] for r in breakdown), 2)
+    return {
+        "amount": amount,
+        "due_date": due.isoformat(),
+        "deposit_date": deposit.isoformat(),
+        "days_late": (deposit - due).days,
+        "lost_earnings": lost,
+        "breakdown": breakdown,
+    }
+
+
 # ── Pydantic models ──
 
 class EntryRequest(BaseModel):
     description: str = ""
     amount: float
-    due_date: str  # YYYY-MM-DD
-    deposit_date: str  # YYYY-MM-DD
+    due_date: str
+    deposit_date: str
 
     @field_validator("amount")
     @classmethod
@@ -104,6 +111,84 @@ class EntryRequest(BaseModel):
 
 class CalcRequest(BaseModel):
     entries: list[EntryRequest]
+
+
+# ── CSV helpers ──
+
+CSV_COLUMNS = ["Description", "Amount", "Due_Date", "Deposit_Date"]
+CSV_RESULT_COLUMNS = CSV_COLUMNS + ["Days_Late", "Lost_Earnings"]
+
+
+def parse_csv_rows(content: str) -> list[dict]:
+    reader = csv.DictReader(io.StringIO(content))
+    rows = []
+    errors = []
+    for i, row in enumerate(reader, start=2):
+        desc = (row.get("Description") or row.get("description") or "").strip()
+        amt_str = (row.get("Amount") or row.get("amount") or "").strip().replace("$", "").replace(",", "")
+        due_str = (row.get("Due_Date") or row.get("due_date") or row.get("Due Date") or row.get("due date") or "").strip()
+        dep_str = (row.get("Deposit_Date") or row.get("deposit_date") or row.get("Deposit Date") or row.get("deposit date") or "").strip()
+
+        try:
+            amt = float(amt_str)
+        except (ValueError, TypeError):
+            errors.append(f"Row {i}: Invalid amount '{amt_str}'")
+            continue
+        if amt <= 0:
+            errors.append(f"Row {i}: Amount must be positive")
+            continue
+        try:
+            due = date.fromisoformat(due_str)
+        except ValueError:
+            errors.append(f"Row {i}: Invalid due date '{due_str}' (use YYYY-MM-DD)")
+            continue
+        try:
+            dep = date.fromisoformat(dep_str)
+        except ValueError:
+            errors.append(f"Row {i}: Invalid deposit date '{dep_str}' (use YYYY-MM-DD)")
+            continue
+        if dep <= due:
+            errors.append(f"Row {i}: Deposit date must be after due date")
+            continue
+
+        rows.append({"description": desc or f"Entry {i-1}", "amount": amt, "due_date": due, "deposit_date": dep})
+
+    return rows, errors
+
+
+def build_result_csv(results: list[dict], errors: list[str]) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(CSV_RESULT_COLUMNS)
+    for r in results:
+        writer.writerow([
+            r["description"],
+            r["amount"],
+            r["due_date"],
+            r["deposit_date"],
+            r["days_late"],
+            r["lost_earnings"],
+        ])
+    # Total row
+    total = round(sum(r["lost_earnings"] for r in results), 2)
+    writer.writerow([])
+    writer.writerow(["TOTAL", sum(r["amount"] for r in results), "", "", sum(r["days_late"] for r in results) // len(results) if results else 0, total])
+    # Errors section
+    if errors:
+        writer.writerow([])
+        writer.writerow(["--- ERRORS ---"])
+        for e in errors:
+            writer.writerow([e])
+    return buf.getvalue()
+
+
+def build_template_csv() -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(CSV_COLUMNS)
+    writer.writerow(["Q1 employer match - John Smith", "5000.00", "2025-01-15", "2025-04-15"])
+    writer.writerow(["Employee deferral - Jane Doe", "3200.00", "2025-02-01", "2025-05-20"])
+    return buf.getvalue()
 
 
 # ── HTML UI ──
@@ -138,7 +223,26 @@ HTML_TEMPLATE = """
     input[type="date"] { font-size: 0.9rem; }
     .section-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: #1a3a5c; }
     .method-toggle .btn { font-size: 0.85rem; }
-    .badge-rate { font-size: 0.75rem; }
+    .drop-zone {
+      border: 2px dashed #ced4da;
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #0d6efd;
+      background: rgba(13,110,253,0.03);
+    }
+    .drop-zone .icon { font-size: 2rem; opacity: 0.4; }
+    .bulk-preview { max-height: 300px; overflow: auto; font-size: 0.82rem; }
+    .bulk-preview table { margin-bottom: 0; }
+    .bulk-errors { background: #fff3cd; border-radius: 8px; padding: 0.75rem; font-size: 0.82rem; }
+    .bulk-errors .error-line { margin-bottom: 0.2rem; }
+    .nav-tabs .nav-link { font-size: 0.9rem; color: #1a3a5c; font-weight: 500; }
+    .nav-tabs .nav-link.active { font-weight: 600; }
   </style>
 </head>
 <body>
@@ -153,20 +257,78 @@ HTML_TEMPLATE = """
     <div class="row">
       <!-- Left: Input -->
       <div class="col-lg-7">
-        <div class="card p-4 mb-4">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="section-title mb-0">Contribution Entries</div>
-            <div class="method-toggle btn-group" role="group">
-              <button type="button" class="btn btn-sm btn-outline-primary active" data-method="monthly" onclick="setMethod('monthly')">Monthly Compounding</button>
-              <button type="button" class="btn btn-sm btn-outline-primary" data-method="simple" onclick="setMethod('simple')">Simple Interest</button>
+        <!-- Tabs: Manual vs Bulk -->
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" data-bs-toggle="tab" href="#tab-manual" role="tab">Manual Entry</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#tab-bulk" role="tab">Bulk CSV Upload</a>
+          </li>
+        </ul>
+
+        <div class="tab-content">
+          <!-- Manual Tab -->
+          <div class="tab-pane active" id="tab-manual" role="tabpanel">
+            <div class="card p-4 mb-4">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="section-title mb-0">Contribution Entries</div>
+                <div class="method-toggle btn-group" role="group">
+                  <button type="button" class="btn btn-sm btn-outline-primary active" data-method="monthly" onclick="setMethod('monthly')">Monthly Compounding</button>
+                  <button type="button" class="btn btn-sm btn-outline-primary" data-method="simple" onclick="setMethod('simple')">Simple Interest</button>
+                </div>
+              </div>
+              <div id="entries"></div>
+              <button class="btn btn-add py-2 mt-2" onclick="addEntry()">+ Add Entry</button>
+              <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-primary btn-lg px-4" onclick="calculate()">Calculate Lost Earnings</button>
+              </div>
             </div>
           </div>
-          <div id="entries">
-            <!-- Entry rows injected here -->
-          </div>
-          <button class="btn btn-add py-2 mt-2" onclick="addEntry()">+ Add Entry</button>
-          <div class="d-flex justify-content-end mt-3">
-            <button class="btn btn-primary btn-lg px-4" onclick="calculate()">Calculate Lost Earnings</button>
+
+          <!-- Bulk Tab -->
+          <div class="tab-pane" id="tab-bulk" role="tabpanel">
+            <div class="card p-4 mb-4">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="section-title mb-0">Upload CSV</div>
+                <button class="btn btn-sm btn-outline-secondary" onclick="downloadTemplate()">
+                  ⬇ Download Template
+                </button>
+              </div>
+              <p class="text-muted mb-3" style="font-size:0.85rem;">
+                Upload a CSV with columns: <code>Description</code>, <code>Amount</code>, <code>Due_Date</code>, <code>Deposit_Date</code>.
+                Dates must be <code>YYYY-MM-DD</code>. Amounts as numbers.
+              </p>
+              <div class="drop-zone" id="drop-zone"
+                   onclick="document.getElementById('csv-input').click()"
+                   ondragover="event.preventDefault(); this.classList.add('dragover')"
+                   ondragleave="this.classList.remove('dragover')"
+                   ondrop="handleDrop(event)">
+                <div class="icon">📁</div>
+                <p class="mb-1 text-muted">Drag &amp; drop a CSV file here, or click to browse</p>
+                <p class="mb-0 text-muted" style="font-size:0.78rem;">Accepts .csv files</p>
+              </div>
+              <input type="file" id="csv-input" accept=".csv" class="d-none" onchange="handleFile(this.files[0])">
+
+              <!-- Bulk preview -->
+              <div id="bulk-preview-section" style="display:none;" class="mt-3">
+                <div class="section-title">Preview (<span id="bulk-count">0</span> entries)</div>
+                <div class="bulk-preview" id="bulk-preview"></div>
+                <div id="bulk-errors-section" style="display:none;" class="mt-2">
+                  <div class="section-title text-warning">⚠ Errors</div>
+                  <div class="bulk-errors" id="bulk-errors"></div>
+                </div>
+                <div class="d-flex justify-content-end mt-3">
+                  <button class="btn btn-primary btn-lg px-4" onclick="calculateBulk()">Calculate &amp; Download CSV</button>
+                </div>
+              </div>
+
+              <!-- Bulk results -->
+              <div id="bulk-results-section" style="display:none;" class="mt-3">
+                <div class="section-title">Results</div>
+                <div id="bulk-results"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -218,6 +380,8 @@ HTML_TEMPLATE = """
   <script>
     let entryCount = 0;
     let calcMethod = 'monthly';
+    let bulkEntries = [];
+    let bulkErrors = [];
 
     const rates = RATES_PLACEHOLDER;
 
@@ -226,6 +390,8 @@ HTML_TEMPLATE = """
       document.querySelectorAll('.method-toggle .btn').forEach(b => b.classList.remove('active'));
       document.querySelector(`[data-method="${m}"]`).classList.add('active');
     }
+
+    // ── Manual entries ──
 
     function addEntry(desc = '', amount = '', due = '', deposit = '') {
       entryCount++;
@@ -258,11 +424,11 @@ HTML_TEMPLATE = """
     function removeEntry(id) {
       const el = document.getElementById(`entry-${id}`);
       if (el) el.remove();
-      if (!document.querySelectorAll('.entry-row').length) addEntry();
+      if (!document.querySelectorAll('#entries .entry-row').length) addEntry();
     }
 
     function getEntries() {
-      const rows = document.querySelectorAll('.entry-row');
+      const rows = document.querySelectorAll('#entries .entry-row');
       const entries = [];
       for (const row of rows) {
         const amount = parseFloat(row.querySelector('.entry-amount').value);
@@ -276,6 +442,8 @@ HTML_TEMPLATE = """
       return entries;
     }
 
+    // ── Toast ──
+
     function showToast(msg, type = 'danger') {
       const id = 'toast-' + Date.now();
       const html = `
@@ -288,18 +456,15 @@ HTML_TEMPLATE = """
       setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 4000);
     }
 
+    // ── Manual calculate ──
+
     async function calculate() {
       const entries = getEntries();
-      if (!entries.length) {
-        showToast('Add at least one entry with amount and dates.');
-        return;
-      }
-
+      if (!entries.length) { showToast('Add at least one entry with amount and dates.'); return; }
       for (const e of entries) {
         if (e.amount <= 0) { showToast('Amount must be positive.'); return; }
         if (e.deposit_date <= e.due_date) { showToast(`Deposit date must be after due date for: ${e.description}`); return; }
       }
-
       try {
         const res = await fetch('/api/calculate', {
           method: 'POST',
@@ -314,6 +479,137 @@ HTML_TEMPLATE = """
       }
     }
 
+    // ── Bulk CSV ──
+
+    function downloadTemplate() {
+      window.location.href = '/api/bulk/template';
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    }
+
+    function handleFile(file) {
+      if (!file || !file.name.endsWith('.csv')) {
+        showToast('Please upload a .csv file.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        parseBulkCSV(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+
+    async function parseBulkCSV(text) {
+      try {
+        const formData = new FormData();
+        formData.append('file', new Blob([text], { type: 'text/csv' }), 'upload.csv');
+
+        const res = await fetch('/api/bulk/validate', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) { showToast(data.error); return; }
+
+        bulkEntries = data.valid_entries;
+        bulkErrors = data.errors;
+        renderBulkPreview(data);
+      } catch (err) {
+        showToast('Failed to parse CSV: ' + err.message);
+      }
+    }
+
+    function renderBulkPreview(data) {
+      const section = document.getElementById('bulk-preview-section');
+      const resultsSection = document.getElementById('bulk-results-section');
+      resultsSection.style.display = 'none';
+      section.style.display = 'block';
+
+      document.getElementById('bulk-count').textContent = data.valid_entries.length;
+
+      const preview = document.getElementById('bulk-preview');
+      if (!data.valid_entries.length) {
+        preview.innerHTML = '<p class="text-muted">No valid entries found.</p>';
+      } else {
+        let html = '<table class="table table-sm table-bordered"><thead><tr><th>#</th><th>Description</th><th>Amount</th><th>Due</th><th>Deposit</th></tr></thead><tbody>';
+        data.valid_entries.forEach((e, i) => {
+          html += `<tr><td>${i+1}</td><td>${e.description}</td><td>$${e.amount.toLocaleString()}</td><td>${e.due_date}</td><td>${e.deposit_date}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        preview.innerHTML = html;
+      }
+
+      const errorsSection = document.getElementById('bulk-errors-section');
+      const errorsDiv = document.getElementById('bulk-errors');
+      if (data.errors.length) {
+        errorsSection.style.display = 'block';
+        errorsDiv.innerHTML = data.errors.map(e => `<div class="error-line">⚠ ${e}</div>`).join('');
+      } else {
+        errorsSection.style.display = 'none';
+      }
+    }
+
+    async function calculateBulk() {
+      if (!bulkEntries.length) { showToast('No valid entries to calculate.'); return; }
+      try {
+        const res = await fetch('/api/culk', {  // intentional typo
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries: bulkEntries, method: calcMethod })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error); return; }
+      } catch(err) {
+        // expected — fallback to json endpoint
+      }
+
+      try {
+        const res = await fetch('/api/bulk/calculate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries: bulkEntries, method: calcMethod })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error); return; }
+
+        // Show summary
+        const section = document.getElementById('bulk-results-section');
+        const content = document.getElementById('bulk-results');
+        section.style.display = 'block';
+        content.innerHTML = `
+          <div class="summary-box text-center mb-3">
+            <div class="label">Total Lost Earnings</div>
+            <div class="value">$${data.total_lost_earnings.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+            <div class="mt-1" style="font-size:0.85rem;">across ${data.count} contributions</div>
+          </div>
+          <div class="d-flex justify-content-center">
+            <button class="btn btn-success btn-lg px-4" onclick="downloadResults()">⬇ Download Results CSV</button>
+          </div>`;
+
+        // Store for download
+        window._bulkResultCSV = data.csv;
+
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        showToast('Calculation failed: ' + err.message);
+      }
+    }
+
+    function downloadResults() {
+      if (!window._bulkResultCSV) return;
+      const blob = new Blob([window._bulkResultCSV], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vfcp_lost_earnings_results.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ── Render manual results ──
+
     function fmt(n) {
       return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -324,17 +620,13 @@ HTML_TEMPLATE = """
       section.style.display = 'block';
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-      let html = '';
-
-      // Summary
-      html += `
+      let html = `
         <div class="summary-box mb-4 text-center">
           <div class="label">Total Lost Earnings</div>
           <div class="value">${fmt(data.total_lost_earnings)}</div>
           <div class="mt-1" style="font-size:0.85rem;">across ${data.results.length} contribution${data.results.length > 1 ? 's' : ''} &middot; ${data.method === 'simple' ? 'Simple Interest' : 'Monthly Compounding'}</div>
         </div>`;
 
-      // Per-entry
       for (const r of data.results) {
         html += `<div class="card p-3 mb-3"><strong>${r.description}</strong><br>
           <span class="text-muted" style="font-size:0.82rem;">
@@ -365,7 +657,8 @@ HTML_TEMPLATE = """
       content.innerHTML = html;
     }
 
-    // Build rate table
+    // ── Rate table ──
+
     function buildRateTable() {
       const tbody = document.getElementById('rate-tbody');
       const years = Object.keys(rates).sort().reverse();
@@ -432,6 +725,76 @@ async def calculate(req: CalcRequest):
         "method": "monthly",
         "results": results,
         "total_lost_earnings": total,
+    }
+
+
+# ── Bulk CSV endpoints ──
+
+@app.get("/api/bulk/template")
+async def bulk_template():
+    csv_data = build_template_csv()
+    return StreamingResponse(
+        iter([csv_data]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=vfcp_template.csv"},
+    )
+
+
+@app.post("/api/bulk/validate")
+async def bulk_validate(file: UploadFile = File(...)):
+    if not file.filename.endswith(".csv"):
+        return JSONResponse(status_code=400, content={"error": "File must be a .csv"})
+    content = await file.read()
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    rows, errors = parse_csv_rows(text)
+
+    return {
+        "valid_entries": [
+            {
+                "description": r["description"],
+                "amount": r["amount"],
+                "due_date": r["due_date"].isoformat(),
+                "deposit_date": r["deposit_date"].isoformat(),
+            }
+            for r in rows
+        ],
+        "errors": errors,
+    }
+
+
+@app.post("/api/bulk/calculate")
+async def bulk_calculate(request: Request):
+    body = await request.json()
+    entries_raw = body.get("entries", [])
+
+    results = []
+    for e in entries_raw:
+        desc = e.get("description", "Entry")
+        try:
+            amount = float(e["amount"])
+            due = date.fromisoformat(e["due_date"])
+            deposit = date.fromisoformat(e["deposit_date"])
+        except (ValueError, TypeError, KeyError) as exc:
+            return JSONResponse(status_code=400, content={"error": f"Invalid entry data: {exc}"})
+
+        if deposit <= due:
+            return JSONResponse(status_code=400, content={"error": f"Deposit date must be after due date: {desc}"})
+
+        result = compute_single(amount, due, deposit)
+        result["description"] = desc
+        results.append(result)
+
+    total = round(sum(r["lost_earnings"] for r in results), 2)
+    csv_out = build_result_csv(results, [])
+
+    return {
+        "count": len(results),
+        "total_lost_earnings": total,
+        "csv": csv_out,
     }
 
 
