@@ -322,11 +322,12 @@ class EntryRequest(BaseModel):
     description: str = ""
     employee_amount: float = 0.0
     employer_amount: float = 0.0
+    loan_amount: float = 0.0
     due_date: str
     deposit_date: str
     final_payment_date: Optional[str] = None
 
-    @field_validator("employee_amount", "employer_amount")
+    @field_validator("employee_amount", "employer_amount", "loan_amount")
     @classmethod
     def amounts_non_negative(cls, v):
         if v < 0:
@@ -335,8 +336,8 @@ class EntryRequest(BaseModel):
 
     @model_validator(mode="after")
     def at_least_one_amount(self):
-        if self.employee_amount <= 0 and self.employer_amount <= 0:
-            raise ValueError("Enter at least one amount (employee deferral or employer match)")
+        if self.employee_amount <= 0 and self.employer_amount <= 0 and self.loan_amount <= 0:
+            raise ValueError("Enter at least one amount (employee deferral, employer match, or loan repayment)")
         return self
 
 
@@ -347,7 +348,7 @@ class CalcRequest(BaseModel):
 
 # ── CSV helpers ──
 
-CSV_COLUMNS = ["Description", "Employee_Amount", "Employer_Amount", "Due_Date", "Deposit_Date", "Final_Payment_Date"]
+CSV_COLUMNS = ["Description", "Employee_Amount", "Employer_Amount", "Loan_Amount", "Due_Date", "Deposit_Date", "Final_Payment_Date"]
 CSV_RESULT_COLUMNS = CSV_COLUMNS + ["Contribution_Type", "Days_Late", "Lost_Earnings"]
 
 
@@ -374,6 +375,7 @@ def parse_csv_rows(content: str) -> tuple[list[dict], list[str]]:
         desc = (row.get("Description") or row.get("description") or "").strip()
         emp_str = (row.get("Employee_Amount") or row.get("employee_amount") or row.get("Employee Amount") or "").strip().replace("$", "").replace(",", "")
         er_str = (row.get("Employer_Amount") or row.get("employer_amount") or row.get("Employer Amount") or "").strip().replace("$", "").replace(",", "")
+        loan_str = (row.get("Loan_Amount") or row.get("loan_amount") or row.get("Loan Amount") or "").strip().replace("$", "").replace(",", "")
         due_str = (row.get("Due_Date") or row.get("due_date") or row.get("Due Date") or row.get("due date") or "").strip()
         dep_str = (row.get("Deposit_Date") or row.get("deposit_date") or row.get("Deposit Date") or row.get("deposit date") or "").strip()
         fp_str = (row.get("Final_Payment_Date") or row.get("final_payment_date") or row.get("Final Payment Date") or "").strip()
@@ -388,11 +390,16 @@ def parse_csv_rows(content: str) -> tuple[list[dict], list[str]]:
         except (ValueError, TypeError):
             errors.append(f"Row {i}: Invalid employer amount '{er_str}'")
             continue
-        if emp_amt < 0 or er_amt < 0:
+        try:
+            loan_amt = float(loan_str) if loan_str else 0.0
+        except (ValueError, TypeError):
+            errors.append(f"Row {i}: Invalid loan amount '{loan_str}'")
+            continue
+        if emp_amt < 0 or er_amt < 0 or loan_amt < 0:
             errors.append(f"Row {i}: Amounts must be non-negative")
             continue
-        if emp_amt <= 0 and er_amt <= 0:
-            errors.append(f"Row {i}: Enter at least one amount (employee or employer)")
+        if emp_amt <= 0 and er_amt <= 0 and loan_amt <= 0:
+            errors.append(f"Row {i}: Enter at least one amount (employee, employer, or loan)")
             continue
         due = parse_flexible_date(due_str)
         if due is None:
@@ -412,6 +419,7 @@ def parse_csv_rows(content: str) -> tuple[list[dict], list[str]]:
             "description": desc or f"Entry {i-1}",
             "employee_amount": emp_amt,
             "employer_amount": er_amt,
+            "loan_amount": loan_amt,
             "due_date": due,
             "deposit_date": dep,
             "final_payment_date": fp,
@@ -430,6 +438,7 @@ def build_result_csv(results: list[dict], errors: list[str]) -> str:
             r["description"],
             r["amount"] if ctype == "employee" else "",
             r["amount"] if ctype == "employer" else "",
+            r["amount"] if ctype == "loan" else "",
             r["due_date"],
             r["deposit_date"],
             r.get("final_payment_date", ""),
@@ -439,7 +448,7 @@ def build_result_csv(results: list[dict], errors: list[str]) -> str:
         ])
     total = round(sum(r["lost_earnings"] for r in results), 2)
     writer.writerow([])
-    writer.writerow(["TOTAL", sum(r["amount"] for r in results), "", "", "", sum(r["days_late"] for r in results) // len(results) if results else 0, total])
+    writer.writerow(["TOTAL", sum(r["amount"] for r in results), "", "", "", "", sum(r["days_late"] for r in results) // len(results) if results else 0, total])
     if errors:
         writer.writerow([])
         writer.writerow(["--- ERRORS ---"])
@@ -452,8 +461,9 @@ def build_template_csv() -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(CSV_COLUMNS)
-    writer.writerow(["Q1 contributions - John Smith", "5000.00", "2500.00", "2025-01-15", "2025-04-15", ""])
-    writer.writerow(["Employee deferral only - Jane Doe", "3200.00", "", "2025-02-01", "2025-05-20", "2025-05-20"])
+    writer.writerow(["Q1 contributions - John Smith", "5000.00", "2500.00", "", "2025-01-15", "2025-04-15", ""])
+    writer.writerow(["Employee deferral only - Jane Doe", "3200.00", "", "", "2025-02-01", "2025-05-20", "2025-05-20"])
+    writer.writerow(["Late loan repayment - Bob Lee", "", "", "450.00", "2025-03-01", "2025-06-15", ""])
     return buf.getvalue()
 
 
@@ -560,7 +570,7 @@ HTML_TEMPLATE = """
                 </button>
               </div>
               <p class="text-muted mb-3" style="font-size:0.85rem;">
-                Upload a CSV with columns: <code>Description</code>, <code>Employee_Amount</code>, <code>Employer_Amount</code>, <code>Due_Date</code>, <code>Deposit_Date</code>,
+                Upload a CSV with columns: <code>Description</code>, <code>Employee_Amount</code>, <code>Employer_Amount</code>, <code>Loan_Amount</code>, <code>Due_Date</code>, <code>Deposit_Date</code>,
                 <code>Final_Payment_Date</code> (optional, defaults to Deposit_Date).
                 Dates must be <code>YYYY-MM-DD</code>. Amounts as numbers.
               </p>
@@ -663,10 +673,11 @@ HTML_TEMPLATE = """
 
     // ── Manual entries ──
 
-    function addEntry(desc, emp, er, due, deposit, fp) {
+    function addEntry(desc, emp, er, loan, due, deposit, fp) {
       if (desc === undefined) desc = '';
       if (emp === undefined) emp = '';
       if (er === undefined) er = '';
+      if (loan === undefined) loan = '';
       if (due === undefined) due = '';
       if (deposit === undefined) deposit = '';
       if (fp === undefined) fp = '';
@@ -679,15 +690,19 @@ HTML_TEMPLATE = """
               <label class="form-label" style="font-size:0.8rem;">Description</label>
               <input type="text" class="form-control form-control-sm entry-desc" placeholder="e.g., Q1 2025 employer match — John Smith" value="${desc}">
             </div>
-            <div class="col-sm-4 col-6">
+            <div class="col-sm-3 col-6">
               <label class="form-label" style="font-size:0.8rem;">Employee Deferral ($)</label>
               <input type="number" class="form-control form-control-sm entry-emp" placeholder="0" step="0.01" min="0" value="${emp}">
             </div>
-            <div class="col-sm-4 col-6">
+            <div class="col-sm-3 col-6">
               <label class="form-label" style="font-size:0.8rem;">Employer Match ($)</label>
               <input type="number" class="form-control form-control-sm entry-er" placeholder="0" step="0.01" min="0" value="${er}">
             </div>
-            <div class="col-sm-4 col-6">
+            <div class="col-sm-3 col-6">
+              <label class="form-label" style="font-size:0.8rem;">Loan Repayment ($)</label>
+              <input type="number" class="form-control form-control-sm entry-loan" placeholder="0" step="0.01" min="0" value="${loan}">
+            </div>
+            <div class="col-sm-3 col-6">
               <label class="form-label" style="font-size:0.8rem;">Loss Date</label>
               <input type="date" class="form-control form-control-sm entry-due" value="${due}">
             </div>
@@ -718,12 +733,13 @@ HTML_TEMPLATE = """
         var row = rows[i];
         var empAmt = parseFloat(row.querySelector('.entry-emp').value) || 0;
         var erAmt = parseFloat(row.querySelector('.entry-er').value) || 0;
+        var loanAmt = parseFloat(row.querySelector('.entry-loan').value) || 0;
         var due = row.querySelector('.entry-due').value;
         var deposit = row.querySelector('.entry-deposit').value;
         var fp = row.querySelector('.entry-fp').value;
         var desc = row.querySelector('.entry-desc').value.trim() || 'Entry';
-        if ((empAmt > 0 || erAmt > 0) && due && deposit) {
-          var entry = { description: desc, employee_amount: empAmt, employer_amount: erAmt, due_date: due, deposit_date: deposit };
+        if ((empAmt > 0 || erAmt > 0 || loanAmt > 0) && due && deposit) {
+          var entry = { description: desc, employee_amount: empAmt, employer_amount: erAmt, loan_amount: loanAmt, due_date: due, deposit_date: deposit };
           if (fp) entry.final_payment_date = fp;
           entries.push(entry);
         }
@@ -752,7 +768,8 @@ HTML_TEMPLATE = """
       if (!entries.length) { showToast('Add at least one entry with amounts and dates.'); return; }
       for (var i = 0; i < entries.length; i++) {
         var e = entries[i];
-        if (e.employee_amount <= 0 && e.employer_amount <= 0) { showToast('Enter at least one amount (employee deferral or employer match).'); return; }
+        if (e.employee_amount <= 0 && e.employer_amount <= 0 && !e.loan_amount) { e.loan_amount = 0; }
+        if (e.employee_amount <= 0 && e.employer_amount <= 0 && e.loan_amount <= 0) { showToast('Enter at least one amount (employee deferral, employer match, or loan repayment).'); return; }
         if (e.deposit_date <= e.due_date) { showToast('Deposit date must be after due date for: ' + e.description); return; }
       }
       try {
@@ -820,12 +837,13 @@ HTML_TEMPLATE = """
       if (!data.valid_entries.length) {
         preview.innerHTML = '<p class="text-muted">No valid entries found.</p>';
       } else {
-        var html = '<table class="table table-sm table-bordered"><thead><tr><th>#</th><th>Description</th><th>Employee</th><th>Employer</th><th>Due</th><th>Deposit</th><th>Final Pay</th></tr></thead><tbody>';
+        var html = '<table class="table table-sm table-bordered"><thead><tr><th>#</th><th>Description</th><th>Employee</th><th>Employer</th><th>Loan</th><th>Due</th><th>Deposit</th><th>Final Pay</th></tr></thead><tbody>';
         for (var i = 0; i < data.valid_entries.length; i++) {
           var e = data.valid_entries[i];
           var empStr = e.employee_amount > 0 ? '$' + e.employee_amount.toLocaleString() : '—';
           var erStr = e.employer_amount > 0 ? '$' + e.employer_amount.toLocaleString() : '—';
-          html += '<tr><td>' + (i+1) + '</td><td>' + e.description + '</td><td>' + empStr + '</td><td>' + erStr + '</td><td>' + e.due_date + '</td><td>' + e.deposit_date + '</td><td>' + (e.final_payment_date || '—') + '</td></tr>';
+          var loanStr = e.loan_amount > 0 ? '$' + e.loan_amount.toLocaleString() : '—';
+          html += '<tr><td>' + (i+1) + '</td><td>' + e.description + '</td><td>' + empStr + '</td><td>' + erStr + '</td><td>' + loanStr + '</td><td>' + e.due_date + '</td><td>' + e.deposit_date + '</td><td>' + (e.final_payment_date || '—') + '</td></tr>';
         }
         html += '</tbody></table>';
         preview.innerHTML = html;
@@ -899,9 +917,11 @@ HTML_TEMPLATE = """
         '<div class="mt-1" style="font-size:0.85rem;">across ' + data.results.length + ' contribution' + (data.results.length > 1 ? 's' : '') + ' &middot; Simple Interest</div></div>';
 
       for (const r of data.results) {
-        var typeLabel = r.contribution_label || (r.contribution_type === 'employer' ? 'Employer Match' : 'Employee Deferral');
+        var typeLabel = r.contribution_label || (r.contribution_type === 'employer' ? 'Employer Match' : r.contribution_type === 'loan' ? 'Loan Repayment' : 'Employee Deferral');
         var typeBadge = r.contribution_type === 'employer'
           ? '<span class="badge bg-danger">' + typeLabel + '</span>'
+          : r.contribution_type === 'loan'
+          ? '<span class="badge bg-success">' + typeLabel + '</span>'
           : '<span class="badge bg-primary">' + typeLabel + '</span>';
         html += '<div class="card p-3 mb-3"><strong>' + r.description + '</strong> ' + typeBadge + '<br>' +
           '<span class="text-muted" style="font-size:0.82rem;">' +
@@ -1004,10 +1024,12 @@ async def calculate(req: CalcRequest):
         for ctype, amt, label in [
             ("employee", entry.employee_amount, "Employee Deferral"),
             ("employer", entry.employer_amount, "Employer Match"),
+            ("employee", entry.loan_amount, "Loan Repayment"),
         ]:
             if amt <= 0:
                 continue
             breakdown = compute_lost_earnings(amt, due, deposit, final_payment_date=final_payment, use_compounding=use_compounding, rate_type=ctype)
+            contrib_type = "loan" if label == "Loan Repayment" else ctype
             lost_earnings = sum(row["earnings"] for row in breakdown)
             results.append({
                 "description": desc,
@@ -1016,7 +1038,7 @@ async def calculate(req: CalcRequest):
                 "deposit_date": entry.deposit_date,
                 "final_payment_date": final_payment.isoformat() if final_payment else None,
                 "days_late": days_late,
-                "contribution_type": ctype,
+                "contribution_type": contrib_type,
                 "contribution_label": label,
                 "breakdown": breakdown,
                 "lost_earnings": round(lost_earnings, 2),
@@ -1061,6 +1083,7 @@ async def bulk_validate(file: UploadFile = File(...)):
                 "description": r["description"],
                 "employee_amount": r["employee_amount"],
                 "employer_amount": r["employer_amount"],
+                "loan_amount": r["loan_amount"],
                 "due_date": r["due_date"].isoformat(),
                 "deposit_date": r["deposit_date"].isoformat(),
                 "final_payment_date": r["final_payment_date"].isoformat() if r["final_payment_date"] else None,
@@ -1081,6 +1104,7 @@ async def bulk_calculate(request: Request):
         desc = e.get("description", "Entry")
         emp_amt = float(e.get("employee_amount", 0) or 0)
         er_amt = float(e.get("employer_amount", 0) or 0)
+        loan_amt = float(e.get("loan_amount", 0) or 0)
         try:
             due = date.fromisoformat(e["due_date"])
             deposit = date.fromisoformat(e["deposit_date"])
@@ -1104,11 +1128,13 @@ async def bulk_calculate(request: Request):
         for ctype, amt, label in [
             ("employee", emp_amt, "Employee Deferral"),
             ("employer", er_amt, "Employer Match"),
+            ("employee", loan_amt, "Loan Repayment"),
         ]:
             if amt <= 0:
                 continue
             breakdown = compute_lost_earnings(amt, due, deposit, final_payment_date=final_payment, use_compounding=use_compounding, rate_type=ctype)
             lost = round(sum(r["earnings"] for r in breakdown), 2)
+            contrib_type = "loan" if label == "Loan Repayment" else ctype
             results.append({
                 "description": desc,
                 "amount": amt,
@@ -1116,7 +1142,7 @@ async def bulk_calculate(request: Request):
                 "deposit_date": deposit.isoformat(),
                 "final_payment_date": end_date.isoformat() if final_payment else None,
                 "days_late": days_late,
-                "contribution_type": ctype,
+                "contribution_type": contrib_type,
                 "contribution_label": label,
                 "lost_earnings": lost,
                 "breakdown": breakdown,
