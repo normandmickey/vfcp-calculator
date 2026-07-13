@@ -184,17 +184,19 @@ def _build_vfcp_rates():
 VFCP_RATES = _build_vfcp_rates()
 
 
-def get_rate_for_date(d: date) -> float:
-    """Return the DOL mid-term interest rate for a given date, or None if unavailable."""
-    # Check pre-built monthly lookup first
-    if d.year in VFCP_RATES and d.month in VFCP_RATES[d.year]:
-        return VFCP_RATES[d.year][d.month]
-    # Fall back to quarter lookup
+def get_rate_for_date(d: date, rate_type: str = "employee") -> float:
+    """Return the DOL interest rate for a given date.
+    rate_type: "employee" uses mid-term rate, "employer" uses high rate.
+    Returns None if unavailable.
+    """
     quarter = (d.month - 1) // 3 + 1
     entry = DOL_RATE_TABLE.get((d.year, quarter))
     if entry is None:
         return None
-    return float(entry[0])
+    mid, high = entry
+    if rate_type == "employer" and high is not None:
+        return float(high)
+    return float(mid)
 
 
 def lost_earnings_factor(days: int, annual_rate: float) -> float:
@@ -210,6 +212,7 @@ def compute_lost_earnings(
     deposit_date: date,
     final_payment_date: Optional[date] = None,
     use_compounding: bool = False,
+    rate_type: str = "employee",
 ) -> list[dict]:
     """
     Compute VFCP lost earnings using simple interest.
@@ -220,6 +223,7 @@ def compute_lost_earnings(
     Formula: Amount × (days / 365) × (rate / 100)
     Each month is computed separately with that month's rate.
     By default uses simple interest (no compounding), matching DOL methodology.
+    rate_type: "employee" uses mid-term rate, "employer" uses high rate.
     """
     if final_payment_date is None:
         final_payment_date = deposit_date
@@ -239,7 +243,7 @@ def compute_lost_earnings(
 
         period_end = min(month_end, final_payment_date)
         days = (period_end - current).days + 1
-        rate = get_rate_for_date(current)
+        rate = get_rate_for_date(current, rate_type=rate_type)
 
         if rate is None:
             # No published rate for this month — skip and note it
@@ -320,6 +324,7 @@ class EntryRequest(BaseModel):
     due_date: str
     deposit_date: str
     final_payment_date: Optional[str] = None
+    contribution_type: str = "employee"  # "employee" (mid-term) or "employer" (high)
 
     @field_validator("amount")
     @classmethod
@@ -625,7 +630,7 @@ HTML_TEMPLATE = """
 
     // ── Manual entries ──
 
-    function addEntry(desc = '', amount = '', due = '', deposit = '', fp = '') {
+    function addEntry(desc = '', amount = '', due = '', deposit = '', fp = '', type = 'employee') {
       entryCount++;
       const id = entryCount;
       const html = `
@@ -634,6 +639,13 @@ HTML_TEMPLATE = """
             <div class="col-12">
               <label class="form-label" style="font-size:0.8rem;">Description</label>
               <input type="text" class="form-control form-control-sm entry-desc" placeholder="e.g., Q1 2025 employer match — John Smith" value="${desc}">
+            </div>
+            <div class="col-sm-4 col-6">
+              <label class="form-label" style="font-size:0.8rem;">Type</label>
+              <select class="form-select form-select-sm entry-type">
+                <option value="employee"${type==='employee'?' selected':''}>Employee Deferral (Mid)</option>
+                <option value="employer"${type==='employer'?' selected':''}>Employer Match (High)</option>
+              </select>
             </div>
             <div class="col-sm-4 col-6">
               <label class="form-label" style="font-size:0.8rem;">Amount ($)</label>
@@ -672,8 +684,9 @@ HTML_TEMPLATE = """
         const deposit = row.querySelector('.entry-deposit').value;
         const fp = row.querySelector('.entry-fp').value;
         const desc = row.querySelector('.entry-desc').value.trim() || `Entry`;
+        const ctype = row.querySelector('.entry-type').value || 'employee';
         if (!isNaN(amount) && due && deposit) {
-          const entry = { description: desc, amount, due_date: due, deposit_date: deposit };
+          const entry = { description: desc, amount, due_date: due, deposit_date: deposit, contribution_type: ctype };
           if (fp) entry.final_payment_date = fp;
           entries.push(entry);
         }
@@ -840,46 +853,39 @@ HTML_TEMPLATE = """
       section.style.display = 'block';
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-      let html = `
-        <div class="summary-box mb-4 text-center">
-          <div class="label">Total Lost Earnings</div>
-          <div class="value">${fmt(data.total_lost_earnings)}</div>
-          <div class="mt-1" style="font-size:0.85rem;">across ${data.results.length} contribution${data.results.length > 1 ? 's' : ''} &middot; Simple Interest</div>
-        </div>`;
+      var html = '<div class="summary-box mb-4 text-center"><div class="label">Total Lost Earnings</div>' +
+        '<div class="value">' + fmt(data.total_lost_earnings) + '</div>' +
+        '<div class="mt-1" style="font-size:0.85rem;">across ' + data.results.length + ' contribution' + (data.results.length > 1 ? 's' : '') + ' &middot; Simple Interest</div></div>';
 
       for (const r of data.results) {
-        html += `<div class="card p-3 mb-3"><strong>${r.description}</strong><br>
-          <span class="text-muted" style="font-size:0.82rem;">
-            ${fmt(r.amount)} &middot; Loss: ${r.due_date} &middot; Recovery: ${r.deposit_date}`;
+        const typeLabel = r.contribution_type === 'employer' ? 'Employer Match (High)' : 'Employee Deferral (Mid)';
+        const typeBadge = r.contribution_type === 'employer'
+          ? '<span class="badge bg-danger">' + typeLabel + '</span>'
+          : '<span class="badge bg-primary">' + typeLabel + '</span>';
+        html += '<div class="card p-3 mb-3"><strong>' + r.description + '</strong> ' + typeBadge + '<br>' +
+          '<span class="text-muted" style="font-size:0.82rem;">' +
+            fmt(r.amount) + ' &middot; Loss: ' + r.due_date + ' &middot; Recovery: ' + r.deposit_date;
         if (r.final_payment_date && r.final_payment_date !== r.deposit_date) {
-          html += ` &middot; Final Payment: ${r.final_payment_date}`;
+          html += ' &middot; Final Payment: ' + r.final_payment_date;
         }
-        html += ` &middot;
-            <span class="badge bg-warning text-dark">${r.days_late} days</span>
-          </span>`;
+        html += ' &middot; ' +
+            '<span class="badge bg-warning text-dark">' + r.days_late + ' days</span>' +
+          '</span>';
 
         if (r.breakdown.length > 0) {
-          html += `<div class="month-detail mt-2">
-            <table class="table table-sm table-bordered results-table">
-              <thead><tr><th>Month</th><th>Rate %</th><th>Days</th><th>Factor</th><th>Start Bal</th><th>Earnings</th><th>End Bal</th></tr></thead>
-              <tbody>`;
-          for (const m of r.breakdown) {
-            const rateStr = m.rate != null ? m.rate.toFixed(2) + '%' : 'N/A';
-            const noteStr = m.note ? ` <span class="text-muted">(${m.note})</span>` : '';
-            const factorStr = m.factor != null ? m.factor.toFixed(6) : '—';
-            html += `<tr>
-              <td>${m.month}</td>
-              <td>${rateStr}${noteStr}</td>
-              <td>${m.days}</td>
-              <td>${factorStr}</td>
-              <td>${fmt(m.beginning_balance)}</td>
-              <td class="text-danger fw-semibold">${fmt(m.earnings)}</td>
-              <td>${fmt(m.ending_balance)}</td></tr>`;
+          html += '<div class="month-detail mt-2"><table class="table table-sm table-bordered results-table">' +
+            '<thead><tr><th>Month</th><th>Rate %</th><th>Days</th><th>Factor</th><th>Start Bal</th><th>Earnings</th><th>End Bal</th></tr></thead><tbody>';
+          for (var j = 0; j < r.breakdown.length; j++) {
+            var m = r.breakdown[j];
+            var rateStr = m.rate != null ? m.rate.toFixed(2) + '%' : 'N/A';
+            var noteStr = m.note ? ' <span class="text-muted">(' + m.note + ')</span>' : '';
+            var factorStr = m.factor != null ? m.factor.toFixed(6) : '—';
+            html += '<tr><td>' + m.month + '</td><td>' + rateStr + noteStr + '</td><td>' + m.days + '</td><td>' + factorStr + '</td><td>' + fmt(m.beginning_balance) + '</td><td class="text-danger fw-semibold">' + fmt(m.earnings) + '</td><td>' + fmt(m.ending_balance) + '</td></tr>';
           }
-          html += `</tbody></table></div>`;
+          html += '</tbody></table></div>';
         }
 
-        html += `<div class="text-end fw-bold" style="font-size:0.9rem;">Lost Earnings: ${fmt(r.lost_earnings)}</div></div>`;
+        html += '<div class="text-end fw-bold" style="font-size:0.9rem;">Lost Earnings: ' + fmt(r.lost_earnings) + '</div></div>';
       }
 
       content.innerHTML = html;
@@ -950,7 +956,8 @@ async def calculate(req: CalcRequest):
             return JSONResponse(status_code=400, content={"error": f"Deposit date must be after due date for: {entry.description}"})
 
         use_compounding = req.method != "simple"
-        breakdown = compute_lost_earnings(entry.amount, due, deposit, final_payment_date=final_payment, use_compounding=use_compounding)
+        rate_type = getattr(entry, 'contribution_type', 'employee') or 'employee'
+        breakdown = compute_lost_earnings(entry.amount, due, deposit, final_payment_date=final_payment, use_compounding=use_compounding, rate_type=rate_type)
         lost_earnings = sum(row["earnings"] for row in breakdown)
         end_date = final_payment or deposit
         days_late = (end_date - due).days
@@ -962,6 +969,7 @@ async def calculate(req: CalcRequest):
             "deposit_date": entry.deposit_date,
             "final_payment_date": final_payment.isoformat() if final_payment else None,
             "days_late": days_late,
+            "contribution_type": entry.contribution_type,
             "breakdown": breakdown,
             "lost_earnings": round(lost_earnings, 2),
         })
