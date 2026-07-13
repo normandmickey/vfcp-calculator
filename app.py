@@ -266,6 +266,7 @@ def compute_lost_earnings(
                 "month": f"{year}-{month:02d}",
                 "rate": rate,
                 "days": days,
+                "factor": factor,
                 "beginning_balance": round(balance - earnings, 2),
                 "earnings": earnings,
                 "ending_balance": balance,
@@ -277,6 +278,7 @@ def compute_lost_earnings(
                 "month": f"{year}-{month:02d}",
                 "rate": rate,
                 "days": days,
+                "factor": factor,
                 "beginning_balance": amount,
                 "earnings": earnings,
                 "ending_balance": round(amount + total_earnings + earnings, 2),
@@ -859,15 +861,17 @@ HTML_TEMPLATE = """
         if (r.breakdown.length > 0) {
           html += `<div class="month-detail mt-2">
             <table class="table table-sm table-bordered results-table">
-              <thead><tr><th>Month</th><th>Rate %</th><th>Days</th><th>Start Bal</th><th>Earnings</th><th>End Bal</th></tr></thead>
+              <thead><tr><th>Month</th><th>Rate %</th><th>Days</th><th>Factor</th><th>Start Bal</th><th>Earnings</th><th>End Bal</th></tr></thead>
               <tbody>`;
           for (const m of r.breakdown) {
             const rateStr = m.rate != null ? m.rate.toFixed(2) + '%' : 'N/A';
             const noteStr = m.note ? ` <span class="text-muted">(${m.note})</span>` : '';
+            const factorStr = m.factor != null ? m.factor.toFixed(6) : '—';
             html += `<tr>
               <td>${m.month}</td>
               <td>${rateStr}${noteStr}</td>
               <td>${m.days}</td>
+              <td>${factorStr}</td>
               <td>${fmt(m.beginning_balance)}</td>
               <td class="text-danger fw-semibold">${fmt(m.earnings)}</td>
               <td>${fmt(m.ending_balance)}</td></tr>`;
