@@ -1253,7 +1253,7 @@ async def how_it_works():
         <tr><th>Period</th><th>Mid-term</th><th>High (+2%)</th></tr>
         <tr><td>Jan – Mar 2026</td><td>7.00%</td><td>9.00%</td></tr>
         <tr><td>Apr – Jun 2026</td><td>6.00%</td><td>8.00%</td></tr>
-        <tr><td>Jul – Sep 2026</td><td>6.00%</td><td>8.00%</td></tr>
+        <tr><td>Jul – Sep 2026</td><td>7.00%</td><td>9.00%</td></tr>
       </table>
     </div>
 
@@ -1298,8 +1298,8 @@ async def how_it_works():
         <tr><td>Apr 2–30</td><td>6.00%</td><td>29</td><td>$1,034 &times; (29/365) &times; 0.06</td><td>$4.93</td></tr>
         <tr><td>May 1–31</td><td>6.00%</td><td>31</td><td>$1,034 &times; (31/365) &times; 0.06</td><td>$5.27</td></tr>
         <tr><td>Jun 1–30</td><td>6.00%</td><td>30</td><td>$1,034 &times; (30/365) &times; 0.06</td><td>$5.10</td></tr>
-        <tr><td>Jul 1–13</td><td>6.00%</td><td>13</td><td>$1,034 &times; (13/365) &times; 0.06</td><td>$2.21</td></tr>
-        <tr style="font-weight:bold;"><td colspan="4">Total</td><td>$17.51</td></tr>
+        <tr><td>Jul 1–13</td><td>7.00%</td><td>13</td><td>$1,034 &times; (13/365) &times; 0.07</td><td>$2.58</td></tr>
+        <tr style="font-weight:bold;"><td colspan="4">Total</td><td>$17.88</td></tr>
       </table>
       <div class="example-box">
         <p class="mb-0" style="font-size:0.85rem;">
@@ -1321,7 +1321,9 @@ async def how_it_works():
         <strong>high rate (8.00%)</strong> instead.
       </p>
       <div class="formula-box">
-        Lost Earnings = $500 &times; (103 / 365) &times; 0.08 = $11.29
+        Q2 (Apr–Jun): $500 &times; (90/365) &times; 0.08 = $9.86<br>
+        Q3 (Jul 1–13): $500 &times; (13/365) &times; 0.09 = $1.60<br>
+        <strong>Total: $11.47</strong>
       </div>
       <p>
         The same dates, same period — but the 2 percentage-point premium on the rate means
