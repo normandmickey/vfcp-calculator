@@ -347,8 +347,8 @@ class CalcRequest(BaseModel):
 
 # ── CSV helpers ──
 
-CSV_COLUMNS = ["Description", "Amount", "Due_Date", "Deposit_Date", "Final_Payment_Date"]
-CSV_RESULT_COLUMNS = CSV_COLUMNS + ["Days_Late", "Lost_Earnings"]
+CSV_COLUMNS = ["Description", "Employee_Amount", "Employer_Amount", "Due_Date", "Deposit_Date", "Final_Payment_Date"]
+CSV_RESULT_COLUMNS = CSV_COLUMNS + ["Contribution_Type", "Days_Late", "Lost_Earnings"]
 
 
 def parse_flexible_date(s: str) -> date | None:
@@ -372,18 +372,27 @@ def parse_csv_rows(content: str) -> tuple[list[dict], list[str]]:
     errors = []
     for i, row in enumerate(reader, start=2):
         desc = (row.get("Description") or row.get("description") or "").strip()
-        amt_str = (row.get("Amount") or row.get("amount") or "").strip().replace("$", "").replace(",", "")
+        emp_str = (row.get("Employee_Amount") or row.get("employee_amount") or row.get("Employee Amount") or "").strip().replace("$", "").replace(",", "")
+        er_str = (row.get("Employer_Amount") or row.get("employer_amount") or row.get("Employer Amount") or "").strip().replace("$", "").replace(",", "")
         due_str = (row.get("Due_Date") or row.get("due_date") or row.get("Due Date") or row.get("due date") or "").strip()
         dep_str = (row.get("Deposit_Date") or row.get("deposit_date") or row.get("Deposit Date") or row.get("deposit date") or "").strip()
         fp_str = (row.get("Final_Payment_Date") or row.get("final_payment_date") or row.get("Final Payment Date") or "").strip()
 
         try:
-            amt = float(amt_str)
+            emp_amt = float(emp_str) if emp_str else 0.0
         except (ValueError, TypeError):
-            errors.append(f"Row {i}: Invalid amount '{amt_str}'")
+            errors.append(f"Row {i}: Invalid employee amount '{emp_str}'")
             continue
-        if amt <= 0:
-            errors.append(f"Row {i}: Amount must be positive")
+        try:
+            er_amt = float(er_str) if er_str else 0.0
+        except (ValueError, TypeError):
+            errors.append(f"Row {i}: Invalid employer amount '{er_str}'")
+            continue
+        if emp_amt < 0 or er_amt < 0:
+            errors.append(f"Row {i}: Amounts must be non-negative")
+            continue
+        if emp_amt <= 0 and er_amt <= 0:
+            errors.append(f"Row {i}: Enter at least one amount (employee or employer)")
             continue
         due = parse_flexible_date(due_str)
         if due is None:
@@ -401,7 +410,8 @@ def parse_csv_rows(content: str) -> tuple[list[dict], list[str]]:
 
         rows.append({
             "description": desc or f"Entry {i-1}",
-            "amount": amt,
+            "employee_amount": emp_amt,
+            "employer_amount": er_amt,
             "due_date": due,
             "deposit_date": dep,
             "final_payment_date": fp,
@@ -415,12 +425,15 @@ def build_result_csv(results: list[dict], errors: list[str]) -> str:
     writer = csv.writer(buf)
     writer.writerow(CSV_RESULT_COLUMNS)
     for r in results:
+        ctype = r.get("contribution_type", "employee")
         writer.writerow([
             r["description"],
-            r["amount"],
+            r["amount"] if ctype == "employee" else "",
+            r["amount"] if ctype == "employer" else "",
             r["due_date"],
             r["deposit_date"],
             r.get("final_payment_date", ""),
+            r.get("contribution_label", ctype),
             r["days_late"],
             r["lost_earnings"],
         ])
@@ -439,8 +452,8 @@ def build_template_csv() -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(CSV_COLUMNS)
-    writer.writerow(["Q1 employer match - John Smith", "5000.00", "2025-01-15", "2025-04-15", ""])
-    writer.writerow(["Employee deferral - Jane Doe", "3200.00", "2025-02-01", "2025-05-20", "2025-05-20"])
+    writer.writerow(["Q1 contributions - John Smith", "5000.00", "2500.00", "2025-01-15", "2025-04-15", ""])
+    writer.writerow(["Employee deferral only - Jane Doe", "3200.00", "", "2025-02-01", "2025-05-20", "2025-05-20"])
     return buf.getvalue()
 
 
@@ -547,7 +560,7 @@ HTML_TEMPLATE = """
                 </button>
               </div>
               <p class="text-muted mb-3" style="font-size:0.85rem;">
-                Upload a CSV with columns: <code>Description</code>, <code>Amount</code>, <code>Due_Date</code>, <code>Deposit_Date</code>,
+                Upload a CSV with columns: <code>Description</code>, <code>Employee_Amount</code>, <code>Employer_Amount</code>, <code>Due_Date</code>, <code>Deposit_Date</code>,
                 <code>Final_Payment_Date</code> (optional, defaults to Deposit_Date).
                 Dates must be <code>YYYY-MM-DD</code>. Amounts as numbers.
               </p>
@@ -793,10 +806,13 @@ HTML_TEMPLATE = """
       if (!data.valid_entries.length) {
         preview.innerHTML = '<p class="text-muted">No valid entries found.</p>';
       } else {
-        let html = '<table class="table table-sm table-bordered"><thead><tr><th>#</th><th>Description</th><th>Amount</th><th>Due</th><th>Deposit</th><th>Final Pay</th></tr></thead><tbody>';
-        data.valid_entries.forEach((e, i) => {
-          html += `<tr><td>${i+1}</td><td>${e.description}</td><td>$${e.amount.toLocaleString()}</td><td>${e.due_date}</td><td>${e.deposit_date}</td><td>${e.final_payment_date || '—'}</td></tr>`;
-        });
+        var html = '<table class="table table-sm table-bordered"><thead><tr><th>#</th><th>Description</th><th>Employee</th><th>Employer</th><th>Due</th><th>Deposit</th><th>Final Pay</th></tr></thead><tbody>';
+        for (var i = 0; i < data.valid_entries.length; i++) {
+          var e = data.valid_entries[i];
+          var empStr = e.employee_amount > 0 ? '$' + e.employee_amount.toLocaleString() : '—';
+          var erStr = e.employer_amount > 0 ? '$' + e.employer_amount.toLocaleString() : '—';
+          html += '<tr><td>' + (i+1) + '</td><td>' + e.description + '</td><td>' + empStr + '</td><td>' + erStr + '</td><td>' + e.due_date + '</td><td>' + e.deposit_date + '</td><td>' + (e.final_payment_date || '—') + '</td></tr>';
+        }
         html += '</tbody></table>';
         preview.innerHTML = html;
       }
@@ -828,8 +844,8 @@ HTML_TEMPLATE = """
         content.innerHTML = `
           <div class="summary-box text-center mb-3">
             <div class="label">Total Lost Earnings</div>
-            <div class="value">$${data.total_lost_earnings.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
-            <div class="mt-1" style="font-size:0.85rem;">across ${data.count} contributions</div>
+            <div class="value">$' + data.total_lost_earnings.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) + '</div>
+            <div class="mt-1" style="font-size:0.85rem;">across ' + data.count + ' contributions</div>
           </div>
           <div class="d-flex justify-content-center">
             <button class="btn btn-success btn-lg px-4" onclick="downloadResults()">⬇ Download Results CSV</button>
@@ -1029,7 +1045,8 @@ async def bulk_validate(file: UploadFile = File(...)):
         "valid_entries": [
             {
                 "description": r["description"],
-                "amount": r["amount"],
+                "employee_amount": r["employee_amount"],
+                "employer_amount": r["employer_amount"],
                 "due_date": r["due_date"].isoformat(),
                 "deposit_date": r["deposit_date"].isoformat(),
                 "final_payment_date": r["final_payment_date"].isoformat() if r["final_payment_date"] else None,
@@ -1048,8 +1065,9 @@ async def bulk_calculate(request: Request):
     results = []
     for e in entries_raw:
         desc = e.get("description", "Entry")
+        emp_amt = float(e.get("employee_amount", 0) or 0)
+        er_amt = float(e.get("employer_amount", 0) or 0)
         try:
-            amount = float(e["amount"])
             due = date.fromisoformat(e["due_date"])
             deposit = date.fromisoformat(e["deposit_date"])
         except (ValueError, TypeError, KeyError) as exc:
@@ -1066,9 +1084,29 @@ async def bulk_calculate(request: Request):
                 return JSONResponse(status_code=400, content={"error": f"Invalid final payment date for: {desc}"})
 
         use_compounding = body.get("method", "monthly") != "simple"
-        result = compute_single(amount, due, deposit, final_payment=final_payment, use_compounding=use_compounding)
-        result["description"] = desc
-        results.append(result)
+        end_date = final_payment or deposit
+        days_late = (end_date - due).days
+
+        for ctype, amt, label in [
+            ("employee", emp_amt, "Employee Deferral"),
+            ("employer", er_amt, "Employer Match"),
+        ]:
+            if amt <= 0:
+                continue
+            breakdown = compute_lost_earnings(amt, due, deposit, final_payment_date=final_payment, use_compounding=use_compounding, rate_type=ctype)
+            lost = round(sum(r["earnings"] for r in breakdown), 2)
+            results.append({
+                "description": desc,
+                "amount": amt,
+                "due_date": due.isoformat(),
+                "deposit_date": deposit.isoformat(),
+                "final_payment_date": end_date.isoformat() if final_payment else None,
+                "days_late": days_late,
+                "contribution_type": ctype,
+                "contribution_label": label,
+                "lost_earnings": lost,
+                "breakdown": breakdown,
+            })
 
     total = round(sum(r["lost_earnings"] for r in results), 2)
     csv_out = build_result_csv(results, [])
