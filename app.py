@@ -201,6 +201,7 @@ HTML_TEMPLATE = """
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VFCP Lost Earnings Calculator</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
     body { background: #f8f9fa; }
     .calc-header { background: linear-gradient(135deg, #1a3a5c 0%, #2c5f8a 100%); color: #fff; padding: 2rem 0; }
