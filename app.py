@@ -3,7 +3,7 @@ import io
 import math
 from fastapi import FastAPI, Request, UploadFile, File, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -320,18 +320,24 @@ def compute_single(
 
 class EntryRequest(BaseModel):
     description: str = ""
-    amount: float
+    employee_amount: float = 0.0
+    employer_amount: float = 0.0
     due_date: str
     deposit_date: str
     final_payment_date: Optional[str] = None
-    contribution_type: str = "employee"  # "employee" (mid-term) or "employer" (high)
 
-    @field_validator("amount")
+    @field_validator("employee_amount", "employer_amount")
     @classmethod
-    def amount_positive(cls, v):
-        if v <= 0:
-            raise ValueError("Amount must be positive")
+    def amounts_non_negative(cls, v):
+        if v < 0:
+            raise ValueError("Amounts must be non-negative")
         return v
+
+    @model_validator(mode="after")
+    def at_least_one_amount(self):
+        if self.employee_amount <= 0 and self.employer_amount <= 0:
+            raise ValueError("Enter at least one amount (employee deferral or employer match)")
+        return self
 
 
 class CalcRequest(BaseModel):
@@ -630,7 +636,13 @@ HTML_TEMPLATE = """
 
     // ── Manual entries ──
 
-    function addEntry(desc = '', amount = '', due = '', deposit = '', fp = '', type = 'employee') {
+    function addEntry(desc, emp, er, due, deposit, fp) {
+      if (desc === undefined) desc = '';
+      if (emp === undefined) emp = '';
+      if (er === undefined) er = '';
+      if (due === undefined) due = '';
+      if (deposit === undefined) deposit = '';
+      if (fp === undefined) fp = '';
       entryCount++;
       const id = entryCount;
       const html = `
@@ -641,15 +653,12 @@ HTML_TEMPLATE = """
               <input type="text" class="form-control form-control-sm entry-desc" placeholder="e.g., Q1 2025 employer match — John Smith" value="${desc}">
             </div>
             <div class="col-sm-4 col-6">
-              <label class="form-label" style="font-size:0.8rem;">Type</label>
-              <select class="form-select form-select-sm entry-type">
-                <option value="employee"${type==='employee'?' selected':''}>Employee Deferral (Mid)</option>
-                <option value="employer"${type==='employer'?' selected':''}>Employer Match (High)</option>
-              </select>
+              <label class="form-label" style="font-size:0.8rem;">Employee Deferral ($)</label>
+              <input type="number" class="form-control form-control-sm entry-emp" placeholder="0" step="0.01" min="0" value="${emp}">
             </div>
             <div class="col-sm-4 col-6">
-              <label class="form-label" style="font-size:0.8rem;">Amount ($)</label>
-              <input type="number" class="form-control form-control-sm entry-amount" placeholder="5,000" step="0.01" min="0" value="${amount}">
+              <label class="form-label" style="font-size:0.8rem;">Employer Match ($)</label>
+              <input type="number" class="form-control form-control-sm entry-er" placeholder="0" step="0.01" min="0" value="${er}">
             </div>
             <div class="col-sm-4 col-6">
               <label class="form-label" style="font-size:0.8rem;">Loss Date</label>
@@ -676,17 +685,18 @@ HTML_TEMPLATE = """
     }
 
     function getEntries() {
-      const rows = document.querySelectorAll('#entries .entry-row');
-      const entries = [];
-      for (const row of rows) {
-        const amount = parseFloat(row.querySelector('.entry-amount').value);
-        const due = row.querySelector('.entry-due').value;
-        const deposit = row.querySelector('.entry-deposit').value;
-        const fp = row.querySelector('.entry-fp').value;
-        const desc = row.querySelector('.entry-desc').value.trim() || `Entry`;
-        const ctype = row.querySelector('.entry-type').value || 'employee';
-        if (!isNaN(amount) && due && deposit) {
-          const entry = { description: desc, amount, due_date: due, deposit_date: deposit, contribution_type: ctype };
+      var rows = document.querySelectorAll('#entries .entry-row');
+      var entries = [];
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var empAmt = parseFloat(row.querySelector('.entry-emp').value) || 0;
+        var erAmt = parseFloat(row.querySelector('.entry-er').value) || 0;
+        var due = row.querySelector('.entry-due').value;
+        var deposit = row.querySelector('.entry-deposit').value;
+        var fp = row.querySelector('.entry-fp').value;
+        var desc = row.querySelector('.entry-desc').value.trim() || 'Entry';
+        if ((empAmt > 0 || erAmt > 0) && due && deposit) {
+          var entry = { description: desc, employee_amount: empAmt, employer_amount: erAmt, due_date: due, deposit_date: deposit };
           if (fp) entry.final_payment_date = fp;
           entries.push(entry);
         }
@@ -712,10 +722,11 @@ HTML_TEMPLATE = """
 
     async function calculate() {
       const entries = getEntries();
-      if (!entries.length) { showToast('Add at least one entry with amount and dates.'); return; }
-      for (const e of entries) {
-        if (e.amount <= 0) { showToast('Amount must be positive.'); return; }
-        if (e.deposit_date <= e.due_date) { showToast(`Deposit date must be after due date for: ${e.description}`); return; }
+      if (!entries.length) { showToast('Add at least one entry with amounts and dates.'); return; }
+      for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        if (e.employee_amount <= 0 && e.employer_amount <= 0) { showToast('Enter at least one amount (employee deferral or employer match).'); return; }
+        if (e.deposit_date <= e.due_date) { showToast('Deposit date must be after due date for: ' + e.description); return; }
       }
       try {
         const res = await fetch('/api/calculate', {
@@ -858,8 +869,8 @@ HTML_TEMPLATE = """
         '<div class="mt-1" style="font-size:0.85rem;">across ' + data.results.length + ' contribution' + (data.results.length > 1 ? 's' : '') + ' &middot; Simple Interest</div></div>';
 
       for (const r of data.results) {
-        const typeLabel = r.contribution_type === 'employer' ? 'Employer Match (High)' : 'Employee Deferral (Mid)';
-        const typeBadge = r.contribution_type === 'employer'
+        var typeLabel = r.contribution_label || (r.contribution_type === 'employer' ? 'Employer Match' : 'Employee Deferral');
+        var typeBadge = r.contribution_type === 'employer'
           ? '<span class="badge bg-danger">' + typeLabel + '</span>'
           : '<span class="badge bg-primary">' + typeLabel + '</span>';
         html += '<div class="card p-3 mb-3"><strong>' + r.description + '</strong> ' + typeBadge + '<br>' +
@@ -956,23 +967,30 @@ async def calculate(req: CalcRequest):
             return JSONResponse(status_code=400, content={"error": f"Deposit date must be after due date for: {entry.description}"})
 
         use_compounding = req.method != "simple"
-        rate_type = getattr(entry, 'contribution_type', 'employee') or 'employee'
-        breakdown = compute_lost_earnings(entry.amount, due, deposit, final_payment_date=final_payment, use_compounding=use_compounding, rate_type=rate_type)
-        lost_earnings = sum(row["earnings"] for row in breakdown)
         end_date = final_payment or deposit
         days_late = (end_date - due).days
+        desc = entry.description or "Entry"
 
-        results.append({
-            "description": entry.description or "Entry",
-            "amount": entry.amount,
-            "due_date": entry.due_date,
-            "deposit_date": entry.deposit_date,
-            "final_payment_date": final_payment.isoformat() if final_payment else None,
-            "days_late": days_late,
-            "contribution_type": entry.contribution_type,
-            "breakdown": breakdown,
-            "lost_earnings": round(lost_earnings, 2),
-        })
+        for ctype, amt, label in [
+            ("employee", entry.employee_amount, "Employee Deferral"),
+            ("employer", entry.employer_amount, "Employer Match"),
+        ]:
+            if amt <= 0:
+                continue
+            breakdown = compute_lost_earnings(amt, due, deposit, final_payment_date=final_payment, use_compounding=use_compounding, rate_type=ctype)
+            lost_earnings = sum(row["earnings"] for row in breakdown)
+            results.append({
+                "description": desc,
+                "amount": amt,
+                "due_date": entry.due_date,
+                "deposit_date": entry.deposit_date,
+                "final_payment_date": final_payment.isoformat() if final_payment else None,
+                "days_late": days_late,
+                "contribution_type": ctype,
+                "contribution_label": label,
+                "breakdown": breakdown,
+                "lost_earnings": round(lost_earnings, 2),
+            })
 
     total = round(sum(r["lost_earnings"] for r in results), 2)
 
