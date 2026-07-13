@@ -620,18 +620,32 @@ HTML_TEMPLATE = """
         <div class="card p-4">
           <div class="section-title">How It Works</div>
           <p class="text-muted" style="font-size:0.85rem;">
-            Under the DOL's VFCP, fiduciaries who made late participant contributions to 401(k) plans
+            Under the DOL's <strong>Voluntary Fiduciary Correction Program (VFCP)</strong>,
+            fiduciaries who made late contributions to retirement plans (e.g., 401(k), 403(b))
             must pay <strong>lost earnings</strong> — the interest the participant would have earned
             had the deposit been made on time.
           </p>
           <p class="text-muted" style="font-size:0.85rem;">
-            The lost earnings are calculated using the <strong>DOL mid-term rate</strong> (5-Year CMT)
-            for the relevant month, applied as simple interest. Interest accrues from the
-            <strong>Loss Date</strong> through the <strong>Final Payment Date</strong> (inclusive).
+            The DOL publishes two rates each quarter:
           </p>
-          <p class="text-muted mb-0" style="font-size:0.85rem;">
+          <div class="mb-2" style="font-size:0.82rem;">
+            <div class="mb-1"><strong style="color:#2563eb;">■ Mid-term Rate (5-Year CMT)</strong> —
+              Used for <em>late employee deferrals</em> (e.g., 401(k) salary deferrals, after-tax contributions).
+              This is the 5-year Constant Maturity Treasury rate.
+            </div>
+            <div><strong style="color:#dc2626;">■ High Rate (Mid-term + 2%)</strong> —
+              Used for <em>late employer matching/non-elective contributions</em>.
+              This equals the mid-term rate plus 2 percentage points.
+            </div>
+          </div>
+          <p class="text-muted mb-2" style="font-size:0.85rem;">
             <strong>Formula:</strong><br>
-            <code>Lost Earnings = Amount × (Days / 365) × (Rate / 100)</code>
+            <code>Lost Earnings = Amount &times; (Days / 365) &times; (Rate / 100)</code>
+          </p>
+          <p class="text-muted mb-0" style="font-size:0.78rem;">
+            <a href="/how-it-works" class="text-decoration-underline">Read the full calculation guide &rarr;</a><br>
+            <span class="text-muted">References: <a href="https://www.dol.gov/agencies/ebsa/laws-regulations/laws/vfcp" target="_blank">DOL VFCP</a> &middot;
+            <a href="https://www.dol.gov/sites/dolgov/public/EBSA/about-ebsa/our-activities/resource-center/publications/interest-rate-table-for-vfcp.html" target="_blank">DOL Interest Rate Table</a></span>
           </p>
         </div>
       </div>
@@ -1116,6 +1130,264 @@ async def bulk_calculate(request: Request):
         "total_lost_earnings": total,
         "csv": csv_out,
     }
+
+
+@app.get("/how-it-works", response_class=HTMLResponse)
+async def how_it_works():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Lost Earnings Are Calculated — VFCP Calculator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f4f6f8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .page-header { background: #1a3a5c; color: #fff; padding: 2rem 0; }
+    .page-header h1 { margin: 0; font-size: 1.5rem; }
+    .page-header p { margin: 0.25rem 0 0; opacity: 0.85; font-size: 0.9rem; }
+    .content-card { background: #fff; border-radius: 12px; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .content-card h2 { font-size: 1.2rem; margin-top: 0; color: #1a3a5c; }
+    .content-card h3 { font-size: 1.05rem; margin-top: 1.25rem; color: #2c5282; }
+    .content-card p { font-size: 0.9rem; line-height: 1.65; }
+    .formula-box { background: #f0f4f8; border-left: 4px solid #1a3a5c; padding: 1rem 1.25rem; border-radius: 0 8px 8px 0; font-family: monospace; font-size: 0.95rem; margin: 1rem 0; }
+    .example-box { background: #fffbf0; border: 1px solid #f0d080; padding: 1rem 1.25rem; border-radius: 8px; margin: 1rem 0; }
+    .example-box .step { margin-bottom: 0.5rem; font-size: 0.88rem; }
+    .rate-badges { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0; }
+    .rate-badge { padding: 0.75rem 1rem; border-radius: 8px; flex: 1; min-width: 200px; }
+    .rate-badge.emp { background: #eff6ff; border: 1px solid #93c5fd; }
+    .rate-badge.er { background: #fef2f2; border: 1px solid #fca5a5; }
+    .rate-badge strong { display: block; margin-bottom: 0.25rem; }
+    .rate-badge .sub { font-size: 0.82rem; color: #555; }
+    .ref-list { font-size: 0.82rem; }
+    .ref-list li { margin-bottom: 0.5rem; }
+    table.rate-example { font-size: 0.85rem; }
+    table.rate-example th { background: #1a3a5c; color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="container">
+      <h1>📊 How Lost Earnings Are Calculated</h1>
+      <p>VFCP Interest Rate Methodology — DOL Voluntary Fiduciary Correction Program</p>
+    </div>
+  </div>
+
+  <div class="container py-4" style="max-width: 800px;">
+    <p class="mb-4"><a href="/" class="text-decoration-none">&larr; Back to Calculator</a></p>
+
+    <!-- Overview -->
+    <div class="content-card">
+      <h2>What Are Lost Earnings?</h2>
+      <p>
+        When a plan fiduciary fails to timely deposit participant contributions to a retirement plan
+        (such as a 401(k) or 403(b) plan), the participants lose the investment earnings they
+        would have received had the money been deposited on time. Under the
+        <strong>Voluntary Fiduciary Correction Program (VFCP)</strong>, the fiduciary must make
+        participants whole by paying <em>lost earnings</em> — essentially the interest the
+        contributions would have earned.
+      </p>
+      <p>
+        The DOL specifies exactly how to calculate these lost earnings using published interest
+        rates, so there is no guesswork involved.
+      </p>
+    </div>
+
+    <!-- Two Rates -->
+    <div class="content-card">
+      <h2>Two Different Rates for Two Types of Contributions</h2>
+      <p>
+        The DOL publishes <strong>two interest rates</strong> each quarter. Which rate you use
+        depends on <em>whose</em> money was deposited late:
+      </p>
+      <div class="rate-badges">
+        <div class="rate-badge emp">
+          <strong style="color:#2563eb;">■ Mid-term Rate (5-Year CMT)</strong>
+          <div class="sub">
+            <strong>Applies to:</strong> Late <em>employee deferrals</em> — salary deferrals,
+            after-tax contributions, and other participant contributions.<br><br>
+            This is the 5-year Constant Maturity Treasury (CMT) rate, published by the
+            Federal Reserve. It reflects the yield on intermediate-term U.S. Treasury bonds.
+          </div>
+        </div>
+        <div class="rate-badge er">
+          <strong style="color:#dc2626;">■ High Rate (Mid-term + 2%)</strong>
+          <div class="sub">
+            <strong>Applies to:</strong> Late <em>employer contributions</em> — matching
+            contributions, non-elective contributions (NECs), and qualified
+            nonelective contributions (QNECs).<br><br>
+            This equals the mid-term rate <strong>plus 2 percentage points</strong>. The DOL adds
+            a premium because employer contributions are discretionary and represent a
+            higher level of fiduciary responsibility.
+          </div>
+        </div>
+      </div>
+      <h3>Why Two Rates?</h3>
+      <p>
+        Employee deferrals are the participant's own money taken from their paycheck —
+        fiduciaries have a strict duty to deposit these promptly (generally within 7 business
+        days of withholding per DOL guidance). Employer matching contributions, while still
+        subject to the plan's deposit deadline, involve discretionary employer decisions.
+        The higher rate reflects this distinction.
+      </p>
+    </div>
+
+    <!-- Where Rates Come From -->
+    <div class="content-card">
+      <h2>Where Do the Rates Come From?</h2>
+      <p>
+        The DOL publishes an official <strong>Interest Rate Table for VFCP</strong> that lists
+        both the mid-term and high rates for each calendar quarter, going back to Q1 1990.
+        These rates are derived from:
+      </p>
+      <ul>
+        <li><strong>Mid-term rate</strong> — The 5-Year CMT rate published by the Federal Reserve Board
+            in its <em>H.15 Selected Interest Rates</em> statistical release.</li>
+        <li><strong>High rate</strong> — The mid-term rate plus 2.00 percentage points (200 basis points).</li>
+      </ul>
+      <p>
+        The rate that applies to any given day is the rate published for the <em>quarter</em>
+        containing that day. For example, any date in April, May, or June uses the Q2 rate.
+      </p>
+      <table class="table table-sm rate-example table-bordered mt-2" style="width:auto;">
+        <tr><th>Period</th><th>Mid-term</th><th>High (+2%)</th></tr>
+        <tr><td>Jan – Mar 2026</td><td>7.00%</td><td>9.00%</td></tr>
+        <tr><td>Apr – Jun 2026</td><td>6.00%</td><td>8.00%</td></tr>
+        <tr><td>Jul – Sep 2026</td><td>6.00%</td><td>8.00%</td></tr>
+      </table>
+    </div>
+
+    <!-- Calculation Method -->
+    <div class="content-card">
+      <h2>The Calculation Method</h2>
+      <p>
+        The DOL uses <strong>simple (non-compounding) interest</strong> applied to the
+        <em>original principal amount</em>. Interest is calculated separately for each
+        month (using that month's quarterly rate) and then summed.
+      </p>
+      <div class="formula-box">
+        Lost Earnings = Amount &times; (Days in Month / 365) &times; (Quarterly Rate / 100)
+      </div>
+      <p>
+        <strong>Key details:</strong>
+      </p>
+      <ul>
+        <li><strong>Simple interest, not compound</strong> — Each month's interest is based on the original
+            amount, never on accumulated interest.</li>
+        <li><strong>365-day year</strong> — Not 360-day (banker's), not 366-day. Always 365.</li>
+        <li><strong>Monthly segmentation</strong> — If the loss period spans multiple months (or quarters),
+            each month is calculated separately using its applicable quarterly rate, then all months
+            are summed.</li>
+        <li><strong>Inclusive dates</strong> — The period includes both the loss date and the recovery date.
+            If a contribution was due April 2 and deposited July 13, that's 102 days of interest.</li>
+        <li><strong>Final Payment Date</strong> — If the fiduciary pays the participant on a date
+            after the recovery date, interest continues accruing through the final payment date.</li>
+      </ul>
+    </div>
+
+    <!-- Worked Example -->
+    <div class="content-card">
+      <h2>Worked Example</h2>
+      <p>
+        <strong>Scenario:</strong> A $1,034 employee deferral was due on April 2, 2026, but not
+        deposited until July 13, 2026. No final payment date — we use July 13.
+      </p>
+      <p><strong>Applicable rates (mid-term for employee deferrals):</strong></p>
+      <table class="table table-sm table-bordered mt-2" style="width:auto; font-size:0.85rem;">
+        <tr><th>Month</th><th>Rate</th><th>Days</th><th>Calculation</th><th>Earnings</th></tr>
+        <tr><td>Apr 2–30</td><td>6.00%</td><td>29</td><td>$1,034 &times; (29/365) &times; 0.06</td><td>$4.93</td></tr>
+        <tr><td>May 1–31</td><td>6.00%</td><td>31</td><td>$1,034 &times; (31/365) &times; 0.06</td><td>$5.27</td></tr>
+        <tr><td>Jun 1–30</td><td>6.00%</td><td>30</td><td>$1,034 &times; (30/365) &times; 0.06</td><td>$5.10</td></tr>
+        <tr><td>Jul 1–13</td><td>6.00%</td><td>13</td><td>$1,034 &times; (13/365) &times; 0.06</td><td>$2.21</td></tr>
+        <tr style="font-weight:bold;"><td colspan="4">Total</td><td>$17.51</td></tr>
+      </table>
+      <div class="example-box">
+        <p class="mb-0" style="font-size:0.85rem;">
+          <strong>Note:</strong> This calculator uses the DOL's published quarterly rates.
+          The DOL's own online calculator may produce slightly different results depending
+          on rounding conventions or rate updates. Always verify with the
+          <a href="https://www.dol.gov/agencies/ebsa/workers-and-families/fiduciaries-and-plan-administrators/voluntary-fiduciary-correction-program" target="_blank">
+          official DOL VFCP resources</a> before filing.
+        </p>
+      </div>
+    </div>
+
+    <!-- Employer Match Example -->
+    <div class="content-card">
+      <h2>Employer Match Example</h2>
+      <p>
+        <strong>Scenario:</strong> A $500 employer match contribution was due on April 2, 2026,
+        deposited July 13, 2026. Since this is an employer contribution, we use the
+        <strong>high rate (8.00%)</strong> instead.
+      </p>
+      <div class="formula-box">
+        Lost Earnings = $500 &times; (103 / 365) &times; 0.08 = $11.29
+      </div>
+      <p>
+        The same dates, same period — but the 2 percentage-point premium on the rate means
+        significantly higher lost earnings. This is why it's important to correctly identify
+        <em>which</em> contributions were late.
+      </p>
+    </div>
+
+    <!-- Date Definitions -->
+    <div class="content-card">
+      <h2>Key Date Definitions</h2>
+      <dl>
+        <dt><strong>Loss Date (Due Date)</strong></dt>
+        <dd>The date the contribution should have been deposited. For employee deferrals,
+            this is generally the date the amount was withheld from the employee's paycheck,
+            or the 7th business day thereafter (per DOL guidance on timely deposits).
+            For employer contributions, this is the plan's deposit deadline.</dd>
+
+        <dt class="mt-3"><strong>Recovery Date (Deposit Date)</strong></dt>
+        <dd>The date the contribution was actually deposited into the plan trust.</dd>
+
+        <dt class="mt-3"><strong>Final Payment Date</strong></dt>
+        <dd>The date the fiduciary actually pays the lost earnings to the participant.
+            If left blank, the recovery date is used. If the final payment date is later
+            than the recovery date, lost earnings continue accruing through that date.</dd>
+      </dl>
+    </div>
+
+    <!-- References -->
+    <div class="content-card">
+      <h2>References</h2>
+      <ul class="ref-list list-unstyled mb-0">
+        <li>&#128196; <strong>DOL VFCP Program</strong><br>
+          <a href="https://www.dol.gov/agencies/ebsa/laws-regulations/laws/vfcp" target="_blank">
+          https://www.dol.gov/agencies/ebsa/laws-regulations/laws/vfcp</a><br>
+          <span class="text-muted">The official program page describing eligibility, correction methods, and filing requirements.</span>
+        </li>
+        <li class="mt-2">&#128196; <strong>DOL Interest Rate Table for VFCP</strong><br>
+          <a href="https://www.dol.gov/sites/dolgov/public/EBSA/about-ebsa/our-activities/resource-center/publications/interest-rate-table-for-vfcp.html" target="_blank">
+          https://www.dol.gov/.../interest-rate-table-for-vfcp.html</a><br>
+          <span class="text-muted">The official quarterly rate table (mid-term and high rates) used for all VFCP lost earnings calculations.</span>
+        </li>
+        <li class="mt-2">&#128196; <strong>DOL VFCP Online Calculator</strong><br>
+          <a href="https://www.dol.gov/agencies/ebsa/workers-and-families/fiduciaries-and-plan-administrators/voluntary-fiduciary-correction-program" target="_blank">
+          https://www.dol.gov/.../voluntary-fiduciary-correction-program</a><br>
+          <span class="text-muted">The DOL's own online lost earnings calculator for reference.</span>
+        </li>
+        <li class="mt-2">&#128196; <strong>ERISA &sect; 404 — Fiduciary Duties</strong><br>
+          <a href="https://www.law.cornell.edu/uscode/text/29/1104" target="_blank">
+          29 U.S.C. &sect; 1104</a><br>
+          <span class="text-muted">The statutory basis requiring fiduciaries to act prudently and exclusively in participants' interests.</span>
+        </li>
+        <li class="mt-2">&#128196; <strong>Federal Reserve H.15 — Selected Interest Rates</strong><br>
+          <a href="https://www.federalreserve.gov/releases/h15/" target="_blank">
+          https://www.federalreserve.gov/releases/h15/</a><br>
+          <span class="text-muted">Source data for the 5-Year CMT rates used in the VFCP table.</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="text-center py-3">
+      <a href="/" class="btn btn-primary px-4">&larr; Back to Calculator</a>
+    </div>
+  </div>
+</body>
+</html>"""
 
 
 @app.get("/api/health")
