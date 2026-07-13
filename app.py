@@ -513,12 +513,8 @@ HTML_TEMPLATE = """
           <!-- Manual Tab -->
           <div class="tab-pane active" id="tab-manual" role="tabpanel">
             <div class="card p-4 mb-4">
-              <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="mb-3">
                 <div class="section-title mb-0">Contribution Entries</div>
-                <div class="method-toggle btn-group" role="group">
-                  <button type="button" class="btn btn-sm btn-outline-primary active" data-method="monthly" onclick="setMethod('monthly')">Monthly Compounding</button>
-                  <button type="button" class="btn btn-sm btn-outline-primary" data-method="simple" onclick="setMethod('simple')">Simple Interest</button>
-                </div>
               </div>
               <div id="entries"></div>
               <button class="btn btn-add py-2 mt-2" onclick="addEntry()">+ Add Entry</button>
@@ -620,17 +616,10 @@ HTML_TEMPLATE = """
 
   <script>
     let entryCount = 0;
-    let calcMethod = 'monthly';
     let bulkEntries = [];
     let bulkErrors = [];
 
-    const rates = RATES_PLACEHOLDER;
-
-    function setMethod(m) {
-      calcMethod = m;
-      document.querySelectorAll('.method-toggle .btn').forEach(b => b.classList.remove('active'));
-      document.querySelector(`[data-method="${m}"]`).classList.add('active');
-    }
+    
 
     // ── Manual entries ──
 
@@ -717,7 +706,7 @@ HTML_TEMPLATE = """
         const res = await fetch('/api/calculate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entries, method: calcMethod })
+          body: JSON.stringify({ entries, method: 'simple' })
         });
         const data = await res.json();
         if (data.error) { showToast(data.error); return; }
@@ -802,7 +791,7 @@ HTML_TEMPLATE = """
         const res = await fetch('/api/bulk/calculate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entries: bulkEntries, method: calcMethod })
+          body: JSON.stringify({ entries: bulkEntries, method: 'simple' })
         });
         const data = await res.json();
         if (data.error) { showToast(data.error); return; }
