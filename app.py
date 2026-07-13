@@ -3,7 +3,7 @@ import io
 from fastapi import FastAPI, Request, UploadFile, File, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, field_validator
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 app = FastAPI(title="VFCP Lost Earnings Calculator")
@@ -119,6 +119,23 @@ CSV_COLUMNS = ["Description", "Amount", "Due_Date", "Deposit_Date"]
 CSV_RESULT_COLUMNS = CSV_COLUMNS + ["Days_Late", "Lost_Earnings"]
 
 
+def parse_flexible_date(s: str) -> date | None:
+    """Parse a date string in YYYY-MM-DD, MM/DD/YYYY, or MM/DD/YY format."""
+    s = s.strip()
+    # YYYY-MM-DD
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        pass
+    # MM/DD/YYYY or MM/DD/YY
+    for fmt in ("%m/%d/%Y", "%m/%d/%y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def parse_csv_rows(content: str) -> list[dict]:
     reader = csv.DictReader(io.StringIO(content))
     rows = []
@@ -137,15 +154,13 @@ def parse_csv_rows(content: str) -> list[dict]:
         if amt <= 0:
             errors.append(f"Row {i}: Amount must be positive")
             continue
-        try:
-            due = date.fromisoformat(due_str)
-        except ValueError:
-            errors.append(f"Row {i}: Invalid due date '{due_str}' (use YYYY-MM-DD)")
+        due = parse_flexible_date(due_str)
+        if due is None:
+            errors.append(f"Row {i}: Invalid due date '{due_str}' (use YYYY-MM-DD or MM/DD/YYYY)")
             continue
-        try:
-            dep = date.fromisoformat(dep_str)
-        except ValueError:
-            errors.append(f"Row {i}: Invalid deposit date '{dep_str}' (use YYYY-MM-DD)")
+        dep = parse_flexible_date(dep_str)
+        if dep is None:
+            errors.append(f"Row {i}: Invalid deposit date '{dep_str}' (use YYYY-MM-DD or MM/DD/YYYY)")
             continue
         if dep <= due:
             errors.append(f"Row {i}: Deposit date must be after due date")
