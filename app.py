@@ -9,12 +9,10 @@ from typing import Optional
 
 app = FastAPI(title="VFCP Lost Earnings Calculator")
 
-# ── DOL VFCP Mid-Term Rates (annual %) ──
+# ── VFCP Lost Earnings Interest Rates (annual %) ──
 # Source: U.S. Treasury 5-Year Constant Maturity Treasury (CMT) rate
 #         https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics
 # These are the last trading day rate for each month.
-# The DOL VFCP calculator uses IRS Factor Table 1 (Rev. Proc. 95-17) methodology
-# with these mid-term rates applied via the daily compounding factor formula.
 VFCP_RATES = {
     2020: {1: 1.67, 2: 1.35, 3: 0.88, 4: 0.37, 5: 0.36, 6: 0.31, 7: 0.31, 8: 0.22, 9: 0.26, 10: 0.27, 11: 0.38, 12: 0.42},
     2021: {1: 0.36, 2: 0.42, 3: 0.71, 4: 0.90, 5: 0.84, 6: 0.81, 7: 0.89, 8: 0.66, 9: 0.78, 10: 0.93, 11: 1.20, 12: 1.15},
@@ -22,7 +20,7 @@ VFCP_RATES = {
     2023: {1: 3.94, 2: 3.48, 3: 4.27, 4: 3.52, 5: 3.64, 6: 3.70, 7: 4.19, 8: 4.24, 9: 4.29, 10: 4.72, 11: 4.67, 12: 4.14},
     2024: {1: 3.93, 2: 3.80, 3: 4.17, 4: 4.34, 5: 4.64, 6: 4.42, 7: 4.44, 8: 3.84, 9: 3.65, 10: 3.51, 11: 4.22, 12: 4.08},
     2025: {1: 4.38, 2: 4.35, 3: 3.97, 4: 3.91, 5: 3.81, 6: 4.01, 7: 3.84, 8: 3.77, 9: 3.74, 10: 3.68, 11: 3.72, 12: 3.67},
-    2026: {1: 3.74, 2: 3.83, 3: 3.62, 4: 3.97, 5: 4.02, 6: 4.18, 7: 4.24, 8: None, 9: None, 10: None, 11: None, 12: None},
+    2026: {1: 3.74, 2: 3.83, 3: 3.62, 4: 3.97, 5: 4.02, 6: 4.18, 7: 7.00, 8: 7.00, 9: 7.00, 10: 7.00, 11: 7.00, 12: 7.00},
 }
 
 
@@ -34,18 +32,11 @@ def get_rate_for_date(d: date) -> float:
     return rate
 
 
-def irs_factor(days: int, annual_rate: float) -> float:
+def lost_earnings_factor(days: int, annual_rate: float) -> float:
     """
-    Compute IRS Factor Table 1 daily compounding factor.
-
-    Based on Rev. Proc. 95-17:
-    factor = (1 + R/100/365)^days - 1
-
-    This matches the DOL's IRS Factor Table 1 values for whole percentage rates
-    (3% through 13%, 1 through 92 days, 365-day year).
+    Simple interest factor: (days / 365) * (rate / 100)
     """
-    daily_rate = annual_rate / 100.0 / 365.0
-    return (1.0 + daily_rate) ** days - 1.0
+    return (days / 365.0) * (annual_rate / 100.0)
 
 
 def compute_lost_earnings(
@@ -56,13 +47,13 @@ def compute_lost_earnings(
     use_compounding: bool = True,
 ) -> list[dict]:
     """
-    Compute VFCP lost earnings using IRS Factor Table 1 methodology.
+    Compute VFCP lost earnings using simple interest.
 
     Interest accrues from due_date through the final payment date (inclusive).
     If no final_payment_date is given, deposit_date is used as the end date.
 
-    For each calendar month, the applicable mid-term rate is used with the
-    IRS Factor Table 1 formula: (1 + R/365)^days - 1
+    Formula: Amount × (days / 365) × (rate / 100)
+    Each month is computed separately with that month's rate.
     """
     if final_payment_date is None:
         final_payment_date = deposit_date
@@ -100,7 +91,7 @@ def compute_lost_earnings(
             current = next_month
             continue
 
-        factor = irs_factor(days, rate)
+        factor = lost_earnings_factor(days, rate)
         earnings = round(balance * factor, 2)
 
         if use_compounding:
@@ -333,7 +324,7 @@ HTML_TEMPLATE = """
   <div class="calc-header">
     <div class="container">
       <h1>⚖️ VFCP Lost Earnings Calculator</h1>
-      <p class="mb-0">Department of Labor — Voluntary Fiduciary Correction Program · IRS Factor Table 1 Methodology</p>
+      <p class="mb-0">Department of Labor — Voluntary Fiduciary Correction Program</p>
     </div>
   </div>
 
@@ -427,7 +418,7 @@ HTML_TEMPLATE = """
         <div class="card p-4 mb-4">
           <div class="section-title">VFCP Mid-Term Rates (Annual %)</div>
           <p class="text-muted mb-2" style="font-size:0.78rem;">
-            Source: U.S. Treasury 5-Year CMT rates · IRS Factor Table 1 (Rev. Proc. 95-17) methodology
+            Source: U.S. Treasury 5-Year CMT rates · Simple interest methodology
           </p>
           <div class="overflow-auto" style="max-height: 520px;">
             <table class="table table-sm rate-table table-bordered">
@@ -446,14 +437,12 @@ HTML_TEMPLATE = """
           </p>
           <p class="text-muted" style="font-size:0.85rem;">
             The lost earnings are calculated using the <strong>DOL mid-term rate</strong> (5-Year CMT)
-            for the relevant month, applied via the <strong>IRS Factor Table 1</strong> formula
-            (Rev. Proc. 95-17) with daily compounding. Interest accrues from the
+            for the relevant month, applied as simple interest. Interest accrues from the
             <strong>Loss Date</strong> through the <strong>Final Payment Date</strong> (inclusive).
           </p>
           <p class="text-muted mb-0" style="font-size:0.85rem;">
             <strong>Formula:</strong><br>
-            <code>Factor = (1 + R/100/365)<sup>days</sup> - 1</code><br>
-            <code>Earnings = Balance × Factor</code>
+            <code>Lost Earnings = Amount × (Days / 365) × (Rate / 100)</code>
           </p>
         </div>
       </div>
@@ -697,7 +686,7 @@ HTML_TEMPLATE = """
         <div class="summary-box mb-4 text-center">
           <div class="label">Total Lost Earnings</div>
           <div class="value">${fmt(data.total_lost_earnings)}</div>
-          <div class="mt-1" style="font-size:0.85rem;">across ${data.results.length} contribution${data.results.length > 1 ? 's' : ''} &middot; ${data.method === 'simple' ? 'Simple Interest' : 'Monthly Compounding'} · IRS Factor Table 1</div>
+          <div class="mt-1" style="font-size:0.85rem;">across ${data.results.length} contribution${data.results.length > 1 ? 's' : ''} &middot; Simple Interest</div>
         </div>`;
 
       for (const r of data.results) {
@@ -898,4 +887,4 @@ async def bulk_calculate(request: Request):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "app": "VFCP Lost Earnings Calculator", "methodology": "IRS Factor Table 1 (Rev. Proc. 95-17)"}
+    return {"status": "ok", "app": "VFCP Lost Earnings Calculator", "methodology": "Simple Interest"}
