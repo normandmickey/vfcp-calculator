@@ -589,7 +589,7 @@ HTML_TEMPLATE = """
           </p>
           <div class="overflow-auto" style="max-height: 520px;">
             <table class="table table-sm rate-table table-bordered">
-              <thead><tr><th>Year</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th></tr></thead>
+              <thead><tr><th>Period</th><th>Mid-term</th><th>High</th></tr></thead>
               <tbody id="rate-tbody"></tbody>
             </table>
           </div>
@@ -897,23 +897,19 @@ HTML_TEMPLATE = """
     function buildRateTable() {
       const tbody = document.getElementById('rate-tbody');
       const quarters = RATE_TABLE_PLACEHOLDER;
-      const years = [...new Set(quarters.map(q => q[0]))].sort((a, b) => b - a);
-      for (const y of years) {
-        let tr = `<tr><td class="fw-bold">${y}</td>`;
-        for (let q = 1; q <= 4; q++) {
-          const entry = quarters.find(e => e[0] === y && e[1] === q);
-          if (entry) {
-            const mid = entry[2];
-            const high = entry[3];
-            tr += high != null
-              ? `<td>${mid}% / ${high}%</td>`
-              : `<td>${mid}% / N/A</td>`;
-          } else {
-            tr += `<td class="text-muted">—</td>`;
-          }
-        }
-        tr += '</tr>';
-        tbody.insertAdjacentHTML('beforeend', tr);
+      const qLabels = {1: 'Jan 1 – Mar 31', 2: 'Apr 1 – Jun 30', 3: 'Jul 1 – Sep 30', 4: 'Oct 1 – Dec 31'};
+      // Sort newest first, within year Q4 first
+      quarters.sort((a, b) => {
+        if (a[0] !== b[0]) return b[0] - a[0];
+        return b[1] - a[1];
+      });
+      for (const [year, q, mid, high] of quarters) {
+        const label = qLabels[q] || `Q${q}`;
+        const period = `${label}, ${year}`;
+        const highStr = high != null ? `${high}%` : 'N/A';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="text-start">${period}</td><td>${mid}%</td><td>${highStr}</td>`;
+        tbody.appendChild(tr);
       }
     }
 
