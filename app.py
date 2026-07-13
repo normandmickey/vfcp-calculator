@@ -30,7 +30,7 @@ def get_rate_for_date(d: date) -> float:
     return rate
 
 
-def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use_pro_rata: bool = True) -> list[dict]:
+def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use_compounding: bool = True) -> list[dict]:
     results = []
     balance = amount
     current = due_date
@@ -44,11 +44,12 @@ def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use
             next_month = date(year, month + 1, 1)
         month_end = next_month - timedelta(days=1)
 
-        if use_pro_rata:
-            period_end = min(month_end, deposit_date - timedelta(days=1))
-            days = (period_end - current).days + 1
-            rate = get_rate_for_date(current)
-            earnings = round(balance * (rate / 100) * (days / 365), 2)
+        period_end = min(month_end, deposit_date - timedelta(days=1))
+        days = (period_end - current).days + 1
+        rate = get_rate_for_date(current)
+        earnings = round(balance * (rate / 100) * (days / 365), 2)
+
+        if use_compounding:
             balance = round(balance + earnings, 2)
             results.append({
                 "month": f"{year}-{month:02d}",
@@ -58,30 +59,26 @@ def compute_lost_earnings(amount: float, due_date: date, deposit_date: date, use
                 "earnings": earnings,
                 "ending_balance": balance,
             })
-            if month_end >= deposit_date:
-                break
-            current = next_month
         else:
-            break
+            # Simple interest: always on original amount, no compounding
+            results.append({
+                "month": f"{year}-{month:02d}",
+                "rate": rate,
+                "days": days,
+                "beginning_balance": amount,
+                "earnings": earnings,
+                "ending_balance": round(amount + sum(r["earnings"] for r in results) + earnings, 2),
+            })
 
-    if not results:
-        total_days = (deposit_date - due_date).days
-        rate = get_rate_for_date(due_date)
-        earnings = round(amount * (rate / 100) * (total_days / 365), 2)
-        results.append({
-            "month": f"{due_date.year}-{due_date.month:02d}",
-            "rate": rate,
-            "days": total_days,
-            "beginning_balance": amount,
-            "earnings": earnings,
-            "ending_balance": round(amount + earnings, 2),
-        })
+        if month_end >= deposit_date:
+            break
+        current = next_month
 
     return results
 
 
-def compute_single(amount: float, due: date, deposit: date) -> dict:
-    breakdown = compute_lost_earnings(amount, due, deposit)
+def compute_single(amount: float, due: date, deposit: date, use_compounding: bool = True) -> dict:
+    breakdown = compute_lost_earnings(amount, due, deposit, use_compounding=use_compounding)
     lost = round(sum(r["earnings"] for r in breakdown), 2)
     return {
         "amount": amount,
@@ -111,6 +108,7 @@ class EntryRequest(BaseModel):
 
 class CalcRequest(BaseModel):
     entries: list[EntryRequest]
+    method: str = "monthly"
 
 
 # ── CSV helpers ──
@@ -721,7 +719,8 @@ async def calculate(req: CalcRequest):
         if deposit <= due:
             return JSONResponse(status_code=400, content={"error": f"Deposit date must be after due date for: {entry.description}"})
 
-        breakdown = compute_lost_earnings(entry.amount, due, deposit)
+        use_compounding = req.method != "simple"
+        breakdown = compute_lost_earnings(entry.amount, due, deposit, use_compounding=use_compounding)
         lost_earnings = sum(row["earnings"] for row in breakdown)
         days_late = (deposit - due).days
 
@@ -738,7 +737,7 @@ async def calculate(req: CalcRequest):
     total = round(sum(r["lost_earnings"] for r in results), 2)
 
     return {
-        "method": "monthly",
+        "method": req.method,
         "results": results,
         "total_lost_earnings": total,
     }
@@ -800,7 +799,8 @@ async def bulk_calculate(request: Request):
         if deposit <= due:
             return JSONResponse(status_code=400, content={"error": f"Deposit date must be after due date: {desc}"})
 
-        result = compute_single(amount, due, deposit)
+        use_compounding = body.get("method", "monthly") != "simple"
+        result = compute_single(amount, due, deposit, use_compounding=use_compounding)
         result["description"] = desc
         results.append(result)
 
