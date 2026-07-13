@@ -889,21 +889,23 @@ HTML_TEMPLATE = """
 
     function buildRateTable() {
       const tbody = document.getElementById('rate-tbody');
+      if (!tbody) return;
       const quarters = RATE_TABLE_PLACEHOLDER;
-      const qLabels = {1: 'Jan 1 – Mar 31', 2: 'Apr 1 – Jun 30', 3: 'Jul 1 – Sep 30', 4: 'Oct 1 – Dec 31'};
+      const qLabels = {1: 'Jan 1 \u2013 Mar 31', 2: 'Apr 1 \u2013 Jun 30', 3: 'Jul 1 \u2013 Sep 30', 4: 'Oct 1 \u2013 Dec 31'};
       // Sort newest first, within year Q4 first
-      quarters.sort((a, b) => {
+      quarters.sort(function(a, b) {
         if (a[0] !== b[0]) return b[0] - a[0];
         return b[1] - a[1];
       });
-      for (const [year, q, mid, high] of quarters) {
-        const label = qLabels[q] || `Q${q}`;
-        const period = `${label}, ${year}`;
-        const highStr = high != null ? `${high}%` : 'N/A';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="text-start">${period}</td><td>${mid}%</td><td>${highStr}</td>`;
-        tbody.appendChild(tr);
+      var rows = '';
+      for (var i = 0; i < quarters.length; i++) {
+        var year = quarters[i][0], q = quarters[i][1], mid = quarters[i][2], high = quarters[i][3];
+        var label = qLabels[q] || 'Q' + q;
+        var period = label + ', ' + year;
+        var highStr = (high !== null) ? high + '%' : 'N/A';
+        rows += '<tr><td class="text-start">' + period + '</td><td>' + mid + '%</td><td>' + highStr + '</td></tr>';
       }
+      tbody.innerHTML = rows;
     }
 
     // Init
