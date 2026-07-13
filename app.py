@@ -9,27 +9,192 @@ from typing import Optional
 
 app = FastAPI(title="VFCP Lost Earnings Calculator")
 
-# ── VFCP Lost Earnings Interest Rates (annual %) ──
-# Source: U.S. Treasury 5-Year Constant Maturity Treasury (CMT) rate
-#         https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics
-# These are the last trading day rate for each month.
-VFCP_RATES = {
-    2020: {1: 1.67, 2: 1.35, 3: 0.88, 4: 0.37, 5: 0.36, 6: 0.31, 7: 0.31, 8: 0.22, 9: 0.26, 10: 0.27, 11: 0.38, 12: 0.42},
-    2021: {1: 0.36, 2: 0.42, 3: 0.71, 4: 0.90, 5: 0.84, 6: 0.81, 7: 0.89, 8: 0.66, 9: 0.78, 10: 0.93, 11: 1.20, 12: 1.15},
-    2022: {1: 1.37, 2: 1.63, 3: 1.56, 4: 2.55, 5: 3.01, 6: 2.94, 7: 2.88, 8: 2.66, 9: 3.39, 10: 3.90, 11: 4.27, 12: 3.68},
-    2023: {1: 3.94, 2: 3.48, 3: 4.27, 4: 3.52, 5: 3.64, 6: 3.70, 7: 4.19, 8: 4.24, 9: 4.29, 10: 4.72, 11: 4.67, 12: 4.14},
-    2024: {1: 3.93, 2: 3.80, 3: 4.17, 4: 4.34, 5: 4.64, 6: 4.42, 7: 4.44, 8: 3.84, 9: 3.65, 10: 3.51, 11: 4.22, 12: 4.08},
-    2025: {1: 4.38, 2: 4.35, 3: 3.97, 4: 3.91, 5: 3.81, 6: 4.01, 7: 3.84, 8: 3.77, 9: 3.74, 10: 3.68, 11: 3.72, 12: 3.67},
-    2026: {1: 3.74, 2: 3.83, 3: 3.62, 4: 3.97, 5: 4.02, 6: 4.18, 7: 7.00, 8: 7.00, 9: 7.00, 10: 7.00, 11: 7.00, 12: 7.00},
+# ── DOL VFCP Interest Rates (annual %) ──
+# Source: DOL Interest Rate Tables for VFCP
+# Two columns per quarter: mid-term rate, high rate.
+# VFCP lost earnings use the mid-term rate (first column).
+# Rates are quarterly (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec).
+VFCP_RATES = {}
+
+# (year, quarter): (mid_term_rate, high_rate)
+# Quarter 1=Jan–Mar, 2=Apr–Jun, 3=Jul–Sep, 4=Oct–Dec
+DOL_RATE_TABLE = {
+    (2026, 1): (7, 9),
+    (2026, 2): (6, 8),
+    (2026, 3): (7, 9),
+    (2025, 4): (7, 9),
+    (2025, 3): (7, 9),
+    (2025, 2): (7, 9),
+    (2025, 1): (7, 9),
+    (2024, 4): (8, 10),
+    (2024, 3): (8, 10),
+    (2024, 2): (8, 10),
+    (2024, 1): (8, 10),
+    (2023, 4): (8, 10),
+    (2023, 3): (7, 9),
+    (2023, 2): (7, 9),
+    (2023, 1): (7, 9),
+    (2022, 4): (6, 8),
+    (2022, 3): (5, 7),
+    (2022, 2): (4, 6),
+    (2022, 1): (3, 5),
+    (2021, 4): (3, 5),
+    (2021, 3): (3, 5),
+    (2021, 2): (3, 5),
+    (2021, 1): (3, 5),
+    (2020, 4): (3, 5),
+    (2020, 3): (3, 5),
+    (2020, 2): (5, 7),
+    (2020, 1): (5, 7),
+    (2019, 4): (5, 7),
+    (2019, 3): (5, 7),
+    (2019, 2): (6, 8),
+    (2019, 1): (6, 8),
+    (2018, 4): (5, 7),
+    (2018, 3): (5, 7),
+    (2018, 2): (5, 7),
+    (2018, 1): (4, 6),
+    (2017, 4): (4, 6),
+    (2017, 3): (4, 6),
+    (2017, 2): (4, 6),
+    (2017, 1): (4, 6),
+    (2016, 4): (4, 6),
+    (2016, 3): (4, 6),
+    (2016, 2): (4, 6),
+    (2016, 1): (3, 5),
+    (2015, 4): (3, 5),
+    (2015, 3): (3, 5),
+    (2015, 2): (3, 5),
+    (2015, 1): (3, 5),
+    (2014, 4): (3, 5),
+    (2014, 3): (3, 5),
+    (2014, 2): (3, 5),
+    (2014, 1): (3, 5),
+    (2013, 4): (3, 5),
+    (2013, 3): (3, 5),
+    (2013, 2): (3, 5),
+    (2013, 1): (3, 5),
+    (2012, 4): (3, 5),
+    (2012, 3): (3, 5),
+    (2012, 2): (3, 5),
+    (2012, 1): (3, 5),
+    (2011, 4): (3, 5),
+    (2011, 3): (4, 6),
+    (2011, 2): (4, 6),
+    (2011, 1): (3, 5),
+    (2010, 4): (4, 6),
+    (2010, 3): (4, 6),
+    (2010, 2): (4, 6),
+    (2010, 1): (4, 6),
+    (2009, 4): (4, 6),
+    (2009, 3): (4, 6),
+    (2009, 2): (4, 6),
+    (2009, 1): (5, 7),
+    (2008, 4): (6, 8),
+    (2008, 3): (5, 7),
+    (2008, 2): (6, 8),
+    (2008, 1): (7, 9),
+    (2007, 4): (8, 10),
+    (2007, 3): (8, 10),
+    (2007, 2): (8, 10),
+    (2007, 1): (8, 10),
+    (2006, 4): (8, 10),
+    (2006, 3): (8, 10),
+    (2006, 2): (7, 9),
+    (2006, 1): (7, 9),
+    (2005, 4): (7, 9),
+    (2005, 3): (6, 8),
+    (2005, 2): (6, 8),
+    (2005, 1): (5, 7),
+    (2004, 4): (5, 7),
+    (2004, 3): (4, 6),
+    (2004, 2): (5, 7),
+    (2004, 1): (4, 6),
+    (2003, 4): (4, 6),
+    (2003, 3): (5, 7),
+    (2003, 2): (5, 7),
+    (2003, 1): (5, 7),
+    (2002, 4): (6, 8),
+    (2002, 3): (6, 8),
+    (2002, 2): (6, 8),
+    (2002, 1): (6, 8),
+    (2001, 4): (7, 9),
+    (2001, 3): (7, 9),
+    (2001, 2): (8, 10),
+    (2001, 1): (9, 11),
+    (2000, 4): (9, 11),
+    (2000, 3): (9, 11),
+    (2000, 2): (9, 11),
+    (2000, 1): (8, 10),
+    (1999, 4): (8, 10),
+    (1999, 3): (8, 10),
+    (1999, 2): (8, 10),
+    (1999, 1): (7, 9),
+    (1998, 4): (8, 10),
+    (1998, 3): (8, 10),
+    (1998, 2): (8, 10),
+    (1998, 1): (9, 11),
+    (1997, 4): (9, 11),
+    (1997, 3): (9, 11),
+    (1997, 2): (9, 11),
+    (1997, 1): (9, 11),
+    (1996, 4): (9, 11),
+    (1996, 3): (9, 11),
+    (1996, 2): (8, 10),
+    (1996, 1): (9, 11),
+    (1995, 4): (9, 11),
+    (1995, 3): (9, 11),
+    (1995, 2): (10, 12),
+    (1995, 1): (9, 11),
+    (1994, 4): (9, 11),
+    (1994, 3): (8, 10),
+    (1994, 2): (7, 9),
+    (1994, 1): (7, 9),
+    (1993, 4): (7, 9),
+    (1993, 3): (7, 9),
+    (1993, 2): (7, 9),
+    (1993, 1): (7, 9),
+    (1992, 4): (7, 9),
+    (1992, 3): (8, 10),
+    (1992, 2): (8, 10),
+    (1992, 1): (9, 11),
+    (1991, 4): (10, 12),
+    (1991, 3): (10, 12),
+    (1991, 2): (10, 12),
+    (1991, 1): (11, 13),
+    (1990, 4): (11, None),
+    (1990, 3): (11, None),
+    (1990, 2): (11, None),
+    (1990, 1): (11, None),
 }
 
 
+def _build_vfcp_rates():
+    """Expand quarterly rates into per-month lookup."""
+    rates = {}
+    for (year, quarter), (mid, _high) in DOL_RATE_TABLE.items():
+        for m_off in range(3):
+            m = quarter * 3 - 3 + m_off + 1  # Q1→1,2,3; Q2→4,5,6; etc.
+            if year not in rates:
+                rates[year] = {}
+            rates[year][m] = float(mid)
+    return rates
+
+
+VFCP_RATES = _build_vfcp_rates()
+
+
 def get_rate_for_date(d: date) -> float:
-    """Return the VFCP mid-term rate for a given date, or None if unavailable."""
-    if d.year not in VFCP_RATES:
+    """Return the DOL mid-term interest rate for a given date, or None if unavailable."""
+    # Check pre-built monthly lookup first
+    if d.year in VFCP_RATES and d.month in VFCP_RATES[d.year]:
+        return VFCP_RATES[d.year][d.month]
+    # Fall back to quarter lookup
+    quarter = (d.month - 1) // 3 + 1
+    entry = DOL_RATE_TABLE.get((d.year, quarter))
+    if entry is None:
         return None
-    rate = VFCP_RATES[d.year].get(d.month)
-    return rate
+    return float(entry[0])
 
 
 def lost_earnings_factor(days: int, annual_rate: float) -> float:
@@ -44,7 +209,7 @@ def compute_lost_earnings(
     due_date: date,
     deposit_date: date,
     final_payment_date: Optional[date] = None,
-    use_compounding: bool = True,
+    use_compounding: bool = False,
 ) -> list[dict]:
     """
     Compute VFCP lost earnings using simple interest.
@@ -54,6 +219,7 @@ def compute_lost_earnings(
 
     Formula: Amount × (days / 365) × (rate / 100)
     Each month is computed separately with that month's rate.
+    By default uses simple interest (no compounding), matching DOL methodology.
     """
     if final_payment_date is None:
         final_payment_date = deposit_date
@@ -106,13 +272,14 @@ def compute_lost_earnings(
             })
         else:
             # Simple interest: always on original amount, no compounding
+            total_earnings = sum(r["earnings"] for r in results)
             results.append({
                 "month": f"{year}-{month:02d}",
                 "rate": rate,
                 "days": days,
                 "beginning_balance": amount,
                 "earnings": earnings,
-                "ending_balance": round(amount + sum(r["earnings"] for r in results) + earnings, 2),
+                "ending_balance": round(amount + total_earnings + earnings, 2),
             })
 
         if month_end >= final_payment_date:
@@ -416,13 +583,13 @@ HTML_TEMPLATE = """
       <!-- Right: Rate Table -->
       <div class="col-lg-5">
         <div class="card p-4 mb-4">
-          <div class="section-title">VFCP Mid-Term Rates (Annual %)</div>
+          <div class="section-title">DOL VFCP Interest Rates (Annual %)</div>
           <p class="text-muted mb-2" style="font-size:0.78rem;">
-            Source: U.S. Treasury 5-Year CMT rates · Simple interest methodology
+            Source: DOL Interest Rate Table for VFCP · Mid-term / High rate per quarter
           </p>
           <div class="overflow-auto" style="max-height: 520px;">
             <table class="table table-sm rate-table table-bordered">
-              <thead><tr><th>Year</th><th>J</th><th>F</th><th>M</th><th>A</th><th>M</th><th>J</th><th>J</th><th>A</th><th>S</th><th>O</th><th>N</th><th>D</th></tr></thead>
+              <thead><tr><th>Year</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th></tr></thead>
               <tbody id="rate-tbody"></tbody>
             </table>
           </div>
@@ -729,12 +896,21 @@ HTML_TEMPLATE = """
 
     function buildRateTable() {
       const tbody = document.getElementById('rate-tbody');
-      const years = Object.keys(rates).sort().reverse();
+      const quarters = RATE_TABLE_PLACEHOLDER;
+      const years = [...new Set(quarters.map(q => q[0]))].sort((a, b) => b - a);
       for (const y of years) {
         let tr = `<tr><td class="fw-bold">${y}</td>`;
-        for (let m = 1; m <= 12; m++) {
-          const r = rates[y][m];
-          tr += r != null ? `<td>${r.toFixed(2)}</td>` : `<td class="text-muted">—</td>`;
+        for (let q = 1; q <= 4; q++) {
+          const entry = quarters.find(e => e[0] === y && e[1] === q);
+          if (entry) {
+            const mid = entry[2];
+            const high = entry[3];
+            tr += high != null
+              ? `<td>${mid}% / ${high}%</td>`
+              : `<td>${mid}% / N/A</td>`;
+          } else {
+            tr += `<td class="text-muted">—</td>`;
+          }
         }
         tr += '</tr>';
         tbody.insertAdjacentHTML('beforeend', tr);
@@ -752,7 +928,9 @@ HTML_TEMPLATE = """
 
 def inject_rates(html: str) -> str:
     import json
-    return html.replace("RATES_PLACEHOLDER", json.dumps(VFCP_RATES))
+    # Build list of [year, quarter, mid, high] for JS
+    table_data = [[y, q, mid, hi] for (y, q), (mid, hi) in DOL_RATE_TABLE.items()]
+    return html.replace("RATE_TABLE_PLACEHOLDER", json.dumps(table_data))
 
 
 @app.get("/", response_class=HTMLResponse)
