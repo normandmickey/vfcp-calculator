@@ -1025,7 +1025,7 @@ HTML_TEMPLATE = """
         content.innerHTML = `
           <div class="summary-box text-center mb-3">
             <div class="label">Total Lost Earnings</div>
-            <div class="value">$' + data.total_lost_earnings.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) + '</div>
+            <div class="value">$' + data.total_lost_earnings.toLocaleString() + '</div>
             <div class="mt-1" style="font-size:0.85rem;">across ' + data.count + ' contributions</div>
           </div>
           <div class="d-flex justify-content-center">
@@ -1052,7 +1052,7 @@ HTML_TEMPLATE = """
     // ── Render manual results ──
 
     function fmt(n) {
-      return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function renderResults(data) {
