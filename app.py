@@ -654,7 +654,8 @@ HTML_TEMPLATE = """
   <div class="calc-header">
     <div class="container">
       <h1>⚖️ VFCP Lost Earnings Calculator</h1>
-      <p class="mb-0">Department of Labor — Voluntary Fiduciary Correction Program</p>
+      <p class="mb-1">Department of Labor — Voluntary Fiduciary Correction Program</p>
+      <p class="mb-0"><a href="/how-it-works" class="text-white text-decoration-underline" style="opacity:0.85;font-size:0.85rem;">How It Works →</a></p>
     </div>
   </div>
 
@@ -754,37 +755,7 @@ HTML_TEMPLATE = """
           </div>
         </div>
 
-        <div class="card p-4">
-          <div class="section-title">How It Works</div>
-          <p class="text-muted" style="font-size:0.85rem;">
-            Under the DOL's <strong>Voluntary Fiduciary Correction Program (VFCP)</strong>,
-            fiduciaries who made late contributions to retirement plans (e.g., 401(k), 403(b))
-            must pay <strong>lost earnings</strong> — the interest the participant would have earned
-            had the deposit been made on time.
-          </p>
-          <p class="text-muted" style="font-size:0.85rem;">
-            The DOL publishes two rates each quarter:
-          </p>
-          <div class="mb-2" style="font-size:0.82rem;">
-            <div class="mb-1"><strong style="color:#2563eb;">■ Mid-term Rate (5-Year CMT)</strong> —
-              Used for <em>late employee deferrals</em> (e.g., 401(k) salary deferrals, after-tax contributions).
-              This is the 5-year Constant Maturity Treasury rate.
-            </div>
-            <div><strong style="color:#dc2626;">■ High Rate (Mid-term + 2%)</strong> —
-              Used for <em>late employer matching/non-elective contributions</em>.
-              This equals the mid-term rate plus 2 percentage points.
-            </div>
-          </div>
-          <p class="text-muted mb-2" style="font-size:0.85rem;">
-            <strong>Formula:</strong><br>
-            <code>Lost Earnings = Amount &times; (Days / 365) &times; (Rate / 100)</code>
-          </p>
-          <p class="text-muted mb-0" style="font-size:0.78rem;">
-            <a href="/how-it-works" class="text-decoration-underline">Read the full calculation guide &rarr;</a><br>
-            <span class="text-muted">References: <a href="https://www.dol.gov/agencies/ebsa/laws-regulations/laws/vfcp" target="_blank">DOL VFCP</a> &middot;
-            <a href="https://www.dol.gov/sites/dolgov/public/EBSA/about-ebsa/our-activities/resource-center/publications/interest-rate-table-for-vfcp.html" target="_blank">DOL Interest Rate Table</a></span>
-          </p>
-        </div>
+
       </div>
     </div>
   </div>
