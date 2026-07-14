@@ -1372,6 +1372,153 @@ async def how_it_works():
       </p>
     </div>
 
+    <!-- VFCP Correction Process -->
+    <div class="content-card">
+      <h2>The VFCP Correction Process</h2>
+      <p>
+        The <strong>Voluntary Fiduciary Correction Program (VFCP)</strong> is a DOL program
+        under ERISA Section 403(c)(1) that allows plan fiduciaries to voluntarily correct
+        certain fiduciary violations — including late deposits of participant contributions —
+        <strong>without</strong> being assessed civil penalties. It is not a mandatory program;
+        fiduciaries participate voluntarily to avoid potentially much higher penalties through
+        DOL enforcement or litigation.
+      </p>
+
+      <h3>Who Qualifies?</h3>
+      <p>The VFCP covers violations related to the following transaction categories:</p>
+      <ul>
+        <li><strong>Delinquent participant contributions</strong> — Late deposits of employee
+            deferrals, loan repayments, or employer matching/non-elective contributions.</li>
+        <li><strong>Prohibited transactions</strong> — Certain impermissible transactions
+            between the plan and a party in interest.</li>
+        <li><strong>Facilitated improper payments</strong> — Payment of plan benefits that should
+            not have been made.</li>
+        <li><strong>Buyback of employee stock</strong> — Situations involving ESOP stock buybacks
+            at improper prices.</li>
+        <li><strong>Failure to timely pay benefits</strong> — Late distribution of plan benefits
+            to participants or beneficiaries.</li>
+        <li><strong>Breach of fiduciary duty</strong> — Other fiduciary breaches resulting in
+            a loss to the plan (e.g., imprudent investments).</li>
+      </ul>
+      <p>
+        To be eligible, the violation must be <strong>identified by the fiduciary</strong> (not
+        discovered through a DOL investigation), and the fiduciary must not be under investigation
+        for the same violation. The fiduciary must also agree to correct the violation and
+        implement measures to prevent it from recurring.
+      </p>
+
+      <h3>Step-by-Step Correction Process</h3>
+      <p>
+        Correcting a late contribution deposit under VFCP typically involves these steps:
+      </p>
+
+      <div class="example-box">
+        <div class="step"><strong>Step 1 — Identify the Violation.</strong><br>
+        Review plan deposits and determine which contributions were deposited late.
+        For employee deferrals, the DOL's safe-harbor is generally <strong>7 business days</strong>
+        after the payroll date (per DOL Field Assistance Bulletin 2004-02, not the statutory
+        15th-of-the-month rule). For employer contributions, use the plan document's deposit deadline.</div>
+
+        <div class="step"><strong>Step 2 — Calculate Lost Earnings.</strong><br>
+        Using the DOL's VFCP interest rate table, calculate the lost earnings on each late
+        deposit. This is exactly what this calculator does — determine the loss date (due date),
+        the recovery date (deposit date), and optionally the final payment date, then compute
+        simple interest month-by-month using the applicable quarterly rate.</div>
+
+        <div class="step"><strong>Step 3 — Make Participants Whole.</strong><br>
+        Deposit the lost earnings (plus the original contributions, if not already deposited)
+        into the plan trust. The lost earnings must be allocated to the affected participants'
+        accounts. If the plan permits, the lost earnings may be invested in the same fund
+        each participant selected, or allocated to a default fund.</div>
+
+        <div class="step"><strong>Step 4 — Notify Affected Participants.</strong><br>
+        Provide written notice to each affected participant (and beneficiary, if applicable)
+        describing the violation, the amount involved, the lost earnings calculated, and the
+        corrective action taken. The notice must include the DOL's VFCP form language or a
+        substantially equivalent statement.</div>
+
+        <div class="step"><strong>Step 5 — File with the DOL.</strong><br>
+        Submit the VFCP filing online through the DOL's <strong>VFCP Online System</strong>
+        at <a href="https://vfcp.dol.gov" target="_blank">https://vfcp.dol.gov</a>. The filing includes:
+          <ul style="margin-top:0.5rem;">
+            <li>A description of the violation(s)</li>
+            <li>Information about each affected participant</li>
+            <li>The amounts involved and the lost earnings calculations</li>
+            <li>Proof of correction (account statements showing the deposits)</li>
+            <li>Proof of participant notice (copies of the notification letters)</li>
+          </ul>
+        </div>
+
+        <div class="step"><strong>Step 6 — Implement Preventive Measures.</strong><br>
+        Adopt procedures to prevent similar violations in the future. This may include
+        improving payroll-to-plan deposit timelines, adding internal compliance checkpoints,
+        or designating a responsible party to monitor deposit deadlines.</div>
+      </div>
+
+      <h3>Filing Requirements &amp; Deadlines</h3>
+      <ul>
+        <li><strong>Filing method:</strong> All VFCP applications must be submitted electronically
+            through the <a href="https://vfcp.dol.gov" target="_blank">VFCP Online filing system</a>.
+            Paper filings are no longer accepted.</li>
+        <li><strong>Deadline:</strong> There is no strict statutory deadline, but the DOL strongly
+            encourages filing <strong>as soon as possible</strong> after discovering the violation.
+            Delays may affect the agency's willingness to accept the filing, especially if the
+            DOL has already initiated an investigation.</li>
+        <li><strong>No-filing threshold:</strong> For certain late deposit violations, the DOL
+            allows corrections <strong>without filing</strong> if the total lost earnings for
+            all affected participants for a given plan year are below a de minimis threshold.
+            However, participants must still be notified and made whole.</li>
+        <li><strong>Correction completion:</strong> All corrective actions — including deposit of
+            contributions, lost earnings, and participant notification — must be completed
+            <strong>before</strong> filing the VFCP application.</li>
+      </ul>
+
+      <h3>Key Terms</h3>
+      <dl>
+        <dt><strong>Fiduciary</strong></dt>
+        <dd>Anyone who exercises discretionary control over plan administration or assets, or who
+            provides investment advice for compensation. This includes plan trustees, administrators,
+            and sometimes employers or payroll providers.</dd>
+
+        <dt class="mt-3"><strong>SCF — Summary of Corrections Filed</strong></dt>
+        <dd>A DOL form summarizing the details of each correction submitted under VFCP.
+            It is filed as part of the online application.</dd>
+
+        <dt class="mt-3"><strong>PRPC — Participant Restoration, Plan, and Compensation</strong></dt>
+        <dd>The spreadsheet or data file submitted with the SCF that details each affected
+            participant, the amounts involved, and the corrective actions taken.</dd>
+
+        <dt class="mt-3"><strong>Party in Interest</strong></dt>
+        <dd>Under ERISA, a party in interest includes the plan sponsor, plan fiduciaries,
+            employees of the plan sponsor, and certain family members. Transactions with
+            these parties are generally prohibited unless an exemption applies.</dd>
+      </dl>
+
+      <h3>What Happens After Filing?</h3>
+      <p>
+        Once the VFCP application is submitted:
+      </p>
+      <ol>
+        <li>The DOL's <strong>Employee Benefits Security Administration (EBSA)</strong> reviews the
+            filing, typically within <strong>60 to 90 days</strong>, though complex cases may take
+            longer.</li>
+        <li>If the correction is deemed satisfactory, the DOL issues a <strong>No-Action Letter</strong>
+            (or compliance letter) confirming that no civil penalties will be assessed for the
+            reported violations.</li>
+        <li>If the correction is incomplete or insufficient, the DOL will request additional
+            information or additional corrective action before issuing the letter.</li>
+        <li>The No-Action Letter provides a degree of legal protection — while it does not
+            eliminate all potential liability, it signals the DOL's acceptance of the correction
+            and its decision not to pursue civil monetary penalties.</li>
+      </ol>
+      <p>
+        <strong>Important:</strong> VFCP provides relief from <em>civil penalties</em> only. It does
+        not provide relief from any taxes that may apply (such as excise taxes under IRC §4975
+        for prohibited transactions). Consult a qualified ERISA attorney or tax advisor for
+        guidance on tax implications.
+      </p>
+    </div>
+
     <!-- Two Rates -->
     <div class="content-card">
       <h2>Two Different Rates for Two Types of Contributions</h2>
