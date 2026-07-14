@@ -603,6 +603,27 @@ HTML_TEMPLATE = """
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VFCP Lost Earnings Calculator</title>
+  <meta name="description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
+  <meta name="keywords" content="VFCP calculator, lost earnings, DOL, ERISA, 401k, 403b, late contribution, fiduciary correction, Department of Labor, retirement plan">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="">
+  <meta property="og:title" content="VFCP Lost Earnings Calculator">
+  <meta property="og:description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="VFCP Lost Earnings Calculator">
+  <meta property="og:url" content="/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="VFCP Lost Earnings Calculator">
+  <meta name="twitter:description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
+  <script type="application/ld+json">{
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "VFCP Lost Earnings Calculator",
+    "description": "Calculate lost earnings for the DOL Voluntary Fiduciary Correction Program using official interest rates.",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "All",
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+  }</script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
@@ -651,6 +672,7 @@ HTML_TEMPLATE = """
   </style>
 </head>
 <body>
+  <header>
   <div class="calc-header">
     <div class="container">
       <h1>⚖️ VFCP Lost Earnings Calculator</h1>
@@ -658,8 +680,9 @@ HTML_TEMPLATE = """
       <p class="mb-0"><a href="/how-it-works" class="text-white text-decoration-underline" style="opacity:0.85;font-size:0.85rem;">How It Works →</a></p>
     </div>
   </div>
+  </header>
 
-  <div class="container py-4">
+  <main class="container py-4">
     <div class="row">
       <!-- Left: Input -->
       <div class="col-lg-7">
@@ -759,6 +782,30 @@ HTML_TEMPLATE = """
       </div>
     </div>
   </div>
+
+  </main>
+
+  <footer class="py-4 mt-4" style="background: #1a3a5c; color: #fff;">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4">
+          <h6 style="font-weight:600;">VFCP Lost Earnings Calculator</h6>
+          <p style="font-size:0.85rem; opacity:0.85; margin:0;">Free calculator for DOL Voluntary Fiduciary Correction Program lost earnings using official interest rates.</p>
+        </div>
+        <div class="col-md-4">
+          <h6 style="font-weight:600;">Navigation</h6>
+          <ul class="list-unstyled mb-0" style="font-size:0.85rem;">
+            <li><a href="/" class="text-white text-decoration-none">Home</a></li>
+            <li><a href="/how-it-works" class="text-white text-decoration-none">How It Works</a></li>
+          </ul>
+        </div>
+        <div class="col-md-4">
+          <h6 style="font-weight:600;">Legal</h6>
+          <p style="font-size:0.85rem; opacity:0.85; margin:0;">&copy; 2025 VFCP Lost Earnings Calculator. For informational purposes only. Not affiliated with the Department of Labor.</p>
+        </div>
+      </div>
+    </div>
+  </footer>
 
   <div class="toast-container" id="toast-container"></div>
 
@@ -1319,6 +1366,18 @@ async def how_it_works():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How Lost Earnings Are Calculated — VFCP Calculator</title>
+  <meta name="description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
+  <meta name="keywords" content="VFCP calculator, lost earnings, DOL, ERISA, 401k, 403b, late contribution, fiduciary correction, Department of Labor, retirement plan">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="">
+  <meta property="og:title" content="How Lost Earnings Are Calculated — VFCP Calculator">
+  <meta property="og:description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="VFCP Lost Earnings Calculator">
+  <meta property="og:url" content="/how-it-works">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="How Lost Earnings Are Calculated — VFCP Calculator">
+  <meta name="twitter:description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background: #f4f6f8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -1716,6 +1775,20 @@ async def how_it_works():
   </div>
 </body>
 </html>"""
+
+
+@app.get("/robots.txt", response_class=HTMLResponse)
+async def robots():
+    return "User-agent: *\nAllow: /\n\nSitemap: /sitemap.xml"
+
+
+@app.get("/sitemap.xml", response_class=HTMLResponse)
+async def sitemap():
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>/</loc><priority>1.0</priority></url>
+  <url><loc>/how-it-works</loc><priority>0.8</priority></url>
+</urlset>"""
 
 
 @app.get("/api/health")
