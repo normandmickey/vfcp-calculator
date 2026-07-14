@@ -1022,15 +1022,7 @@ HTML_TEMPLATE = """
         const section = document.getElementById('bulk-results-section');
         const content = document.getElementById('bulk-results');
         section.style.display = 'block';
-        content.innerHTML = `
-          <div class="summary-box text-center mb-3">
-            <div class="label">Total Lost Earnings</div>
-            <div class="value">$' + data.total_lost_earnings.toLocaleString() + '</div>
-            <div class="mt-1" style="font-size:0.85rem;">across ' + data.count + ' contributions</div>
-          </div>
-          <div class="d-flex justify-content-center">
-            <button class="btn btn-success btn-lg px-4" onclick="downloadResults()">⬇ Download Results CSV</button>
-          </div>`;
+        content.innerHTML = '<div class="summary-box text-center mb-3"><div class="label">Total Lost Earnings</div><div class="value">$' + data.total_lost_earnings.toLocaleString() + '</div><div class="mt-1" style="font-size:0.85rem;">across ' + data.count + ' contributions</div></div><div class="d-flex justify-content-center"><button class="btn btn-success btn-lg px-4" onclick="downloadResults()">⬇ Download Results CSV</button></div>';
         window._bulkResultCSV = data.csv;
         section.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
