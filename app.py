@@ -411,10 +411,6 @@ def parse_csv_rows(content: str) -> tuple[list[dict], list[str]]:
         if dep is None:
             errors.append(f"Row {i}: Invalid deposit date '{dep_str}' (use YYYY-MM-DD or MM/DD/YYYY)")
             continue
-        if dep <= due:
-            errors.append(f"Row {i}: Deposit date must be after due date")
-            continue
-
         fp = parse_flexible_date(fp_str) if fp_str else None
 
         rows.append({
@@ -534,10 +530,6 @@ def _parse_single_row(raw: dict, line_num: int) -> tuple[list[dict], list[str]]:
     if dep is None:
         errors.append(f"Row {line_num}: Invalid deposit date '{dep_str}' (use YYYY-MM-DD or MM/DD/YYYY)")
         return rows, errors
-    if dep <= due:
-        errors.append(f"Row {line_num}: Deposit date must be after due date")
-        return rows, errors
-
     fp = _coerce_date(fp_str) if fp_str else None
 
     rows.append({
@@ -876,7 +868,7 @@ HTML_TEMPLATE = """
         if ((empAmt > 0 || erAmt > 0 || loanAmt > 0) && due && deposit) {
           var entry = { description: desc, employee_amount: empAmt, employer_amount: erAmt, loan_amount: loanAmt, due_date: due, deposit_date: deposit };
           if (fp) entry.final_payment_date = fp;
-          entries.push(entry);
+          var entries = [];
         }
       }
       return entries;
@@ -905,7 +897,7 @@ HTML_TEMPLATE = """
         var e = entries[i];
         if (e.employee_amount <= 0 && e.employer_amount <= 0 && !e.loan_amount) { e.loan_amount = 0; }
         if (e.employee_amount <= 0 && e.employer_amount <= 0 && e.loan_amount <= 0) { showToast('Enter at least one amount (employee deferral, employer match, or loan repayment).'); return; }
-        if (e.deposit_date <= e.due_date) { showToast('Deposit date must be after due date for: ' + e.description); return; }
+        if (e.employee_amount <= 0 && e.employer_amount <= 0 && e.loan_amount <= 0) { showToast('Enter at least one amount (employee deferral, employer match, or loan repayment).'); return; }
       }
       try {
         const res = await fetch('/api/calculate', {
@@ -1170,13 +1162,32 @@ async def calculate(req: CalcRequest):
             except ValueError:
                 return JSONResponse(status_code=400, content={"error": "Invalid final payment date format. Use YYYY-MM-DD."})
 
-        if deposit <= due:
-            return JSONResponse(status_code=400, content={"error": f"Deposit date must be after due date for: {entry.description}"})
-
         use_compounding = req.method != "simple"
         end_date = final_payment or deposit
         days_late = (end_date - due).days
         desc = entry.description or "Entry"
+
+        if deposit <= due:
+            for ctype, amt, label in [
+                ("employee", entry.employee_amount, "Employee Deferral"),
+                ("employer", entry.employer_amount, "Employer Match"),
+                ("employee", entry.loan_amount, "Loan Repayment"),
+            ]:
+                if amt <= 0:
+                    continue
+                results.append({
+                    "description": desc,
+                    "amount": amt,
+                    "due_date": entry.due_date,
+                    "deposit_date": entry.deposit_date,
+                    "final_payment_date": final_payment.isoformat() if final_payment else None,
+                    "days_late": days_late,
+                    "contribution_type": "loan" if label == "Loan Repayment" else ctype,
+                    "contribution_label": label,
+                    "breakdown": [],
+                    "lost_earnings": 0.0,
+                })
+            continue
 
         for ctype, amt, label in [
             ("employee", entry.employee_amount, "Employee Deferral"),
@@ -1272,19 +1283,32 @@ async def bulk_calculate(request: Request):
         except (ValueError, TypeError, KeyError) as exc:
             return JSONResponse(status_code=400, content={"error": f"Invalid entry data: {exc}"})
 
-        if deposit <= due:
-            return JSONResponse(status_code=400, content={"error": f"Deposit date must be after due date: {desc}"})
-
-        final_payment = None
-        if e.get("final_payment_date"):
-            try:
-                final_payment = date.fromisoformat(e["final_payment_date"])
-            except ValueError:
-                return JSONResponse(status_code=400, content={"error": f"Invalid final payment date for: {desc}"})
-
         use_compounding = body.get("method", "monthly") != "simple"
         end_date = final_payment or deposit
         days_late = (end_date - due).days
+
+        if deposit <= due:
+            for ctype, amt, label in [
+                ("employee", emp_amt, "Employee Deferral"),
+                ("employer", er_amt, "Employer Match"),
+                ("employee", loan_amt, "Loan Repayment"),
+            ]:
+                if amt <= 0:
+                    continue
+                contrib_type = "loan" if label == "Loan Repayment" else ctype
+                results.append({
+                    "description": desc,
+                    "amount": amt,
+                    "due_date": due.isoformat(),
+                    "deposit_date": deposit.isoformat(),
+                    "final_payment_date": end_date.isoformat() if final_payment else None,
+                    "days_late": days_late,
+                    "contribution_type": contrib_type,
+                    "contribution_label": label,
+                    "lost_earnings": 0.0,
+                    "breakdown": [],
+                })
+            continue
 
         for ctype, amt, label in [
             ("employee", emp_amt, "Employee Deferral"),
