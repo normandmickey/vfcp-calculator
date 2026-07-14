@@ -1283,6 +1283,13 @@ async def bulk_calculate(request: Request):
         except (ValueError, TypeError, KeyError) as exc:
             return JSONResponse(status_code=400, content={"error": f"Invalid entry data: {exc}"})
 
+        final_payment = None
+        if e.get("final_payment_date"):
+            try:
+                final_payment = date.fromisoformat(e["final_payment_date"])
+            except ValueError:
+                return JSONResponse(status_code=400, content={"error": f"Invalid final payment date for: {desc}"})
+
         use_compounding = body.get("method", "monthly") != "simple"
         end_date = final_payment or deposit
         days_late = (end_date - due).days
