@@ -868,7 +868,7 @@ HTML_TEMPLATE = """
         if ((empAmt > 0 || erAmt > 0 || loanAmt > 0) && due && deposit) {
           var entry = { description: desc, employee_amount: empAmt, employer_amount: erAmt, loan_amount: loanAmt, due_date: due, deposit_date: deposit };
           if (fp) entry.final_payment_date = fp;
-          var entries = [];
+          entries.push(entry);
         }
       }
       return entries;
