@@ -895,8 +895,6 @@ HTML_TEMPLATE = """
       if (!entries.length) { showToast('Add at least one entry with amounts and dates.'); return; }
       for (var i = 0; i < entries.length; i++) {
         var e = entries[i];
-        if (e.employee_amount <= 0 && e.employer_amount <= 0 && !e.loan_amount) { e.loan_amount = 0; }
-        if (e.employee_amount <= 0 && e.employer_amount <= 0 && e.loan_amount <= 0) { showToast('Enter at least one amount (employee deferral, employer match, or loan repayment).'); return; }
         if (e.employee_amount <= 0 && e.employer_amount <= 0 && e.loan_amount <= 0) { showToast('Enter at least one amount (employee deferral, employer match, or loan repayment).'); return; }
       }
       try {
