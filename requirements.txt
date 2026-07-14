@@ -3,3 +3,5 @@ uvicorn[standard]>=0.34
 gunicorn
 python-dotenv
 python-multipart
+openpyxl>=3.1
+xlrd>=2.0

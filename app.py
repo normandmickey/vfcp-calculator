@@ -1,6 +1,8 @@
 import csv
 import io
 import math
+from openpyxl import load_workbook
+from xlrd import open_workbook as xlrd_open_workbook
 from fastapi import FastAPI, Request, UploadFile, File, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, field_validator, model_validator
@@ -428,6 +430,139 @@ def parse_csv_rows(content: str) -> tuple[list[dict], list[str]]:
     return rows, errors
 
 
+def parse_excel_rows(content: bytes, filename: str) -> tuple[list[dict], list[str]]:
+    """Parse an .xlsx (openpyxl) or .xls (xlrd) file and return rows matching the CSV schema."""
+    rows = []
+    errors = []
+
+    if filename.lower().endswith(".xls"):
+        # Legacy .xls via xlrd
+        wb = xlrd_open_workbook(file_contents=content)
+        ws = wb.sheet_by_index(0)
+        headers = [str(ws.cell_value(0, c)).strip() for c in range(ws.ncols)]
+        for i in range(1, ws.nrows):
+            raw = {headers[c]: str(ws.cell_value(i, c)).strip() for c in range(ws.ncols)}
+            row, errs = _parse_single_row(raw, i + 2)
+            rows.extend(row)
+            errors.extend(errs)
+    else:
+        # Modern .xlsx via openpyxl
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            headers = [str(h).strip() if h is not None else "" for h in next(rows_iter)]
+        except StopIteration:
+            wb.close()
+            return rows, ["Excel file is empty (no header row)"]
+        for idx, raw_vals in enumerate(rows_iter, start=2):
+            raw = {}
+            for c, h in enumerate(headers):
+                if c < len(raw_vals) and raw_vals[c] is not None:
+                    val = raw_vals[c]
+                    if isinstance(val, (int, float)):
+                        raw[h] = str(val)
+                    else:
+                        raw[h] = str(val).strip()
+                else:
+                    raw[h] = ""
+            row, errs = _parse_single_row(raw, idx)
+            rows.extend(row)
+            errors.extend(errs)
+        wb.close()
+
+    return rows, errors
+
+
+def _parse_single_row(raw: dict, line_num: int) -> tuple[list[dict], list[str]]:
+    """Parse one raw row dict into validated entries. Returns (rows, errors)."""
+    rows = []
+    errors = []
+
+    def _get(*keys):
+        for k in keys:
+            v = raw.get(k, "") or raw.get(k.lower(), "") or raw.get(k.replace("_", " "), "") or ""
+            if v:
+                return v.strip()
+        return ""
+
+    desc = _get("Description", "description")
+    emp_str = _get("Employee_Amount", "employee_amount", "Employee Amount").replace("$", "").replace(",", "")
+    er_str = _get("Employer_Amount", "employer_amount", "Employer Amount").replace("$", "").replace(",", "")
+    loan_str = _get("Loan_Amount", "loan_amount", "Loan Amount").replace("$", "").replace(",", "")
+    due_str = _get("Due_Date", "due_date", "Due Date", "due date")
+    dep_str = _get("Deposit_Date", "deposit_date", "Deposit Date", "deposit date")
+    fp_str = _get("Final_Payment_Date", "final_payment_date", "Final Payment Date")
+
+    # Handle Excel numeric dates (days since 1900 or 1904 epoch)
+    def _coerce_date(val):
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            try:
+                return _excel_number_to_date(val)
+            except (ValueError, OverflowError):
+                return None
+        return parse_flexible_date(str(val))
+
+    try:
+        emp_amt = float(emp_str) if emp_str else 0.0
+    except (ValueError, TypeError):
+        errors.append(f"Row {line_num}: Invalid employee amount '{emp_str}'")
+        return rows, errors
+    try:
+        er_amt = float(er_str) if er_str else 0.0
+    except (ValueError, TypeError):
+        errors.append(f"Row {line_num}: Invalid employer amount '{er_str}'")
+        return rows, errors
+    try:
+        loan_amt = float(loan_str) if loan_str else 0.0
+    except (ValueError, TypeError):
+        errors.append(f"Row {line_num}: Invalid loan amount '{loan_str}'")
+        return rows, errors
+
+    if emp_amt < 0 or er_amt < 0 or loan_amt < 0:
+        errors.append(f"Row {line_num}: Amounts must be non-negative")
+        return rows, errors
+    if emp_amt <= 0 and er_amt <= 0 and loan_amt <= 0:
+        errors.append(f"Row {line_num}: Enter at least one amount (employee, employer, or loan)")
+        return rows, errors
+
+    due = _coerce_date(due_str) if due_str else None
+    if due is None:
+        errors.append(f"Row {line_num}: Invalid due date '{due_str}' (use YYYY-MM-DD or MM/DD/YYYY)")
+        return rows, errors
+    dep = _coerce_date(dep_str) if dep_str else None
+    if dep is None:
+        errors.append(f"Row {line_num}: Invalid deposit date '{dep_str}' (use YYYY-MM-DD or MM/DD/YYYY)")
+        return rows, errors
+    if dep <= due:
+        errors.append(f"Row {line_num}: Deposit date must be after due date")
+        return rows, errors
+
+    fp = _coerce_date(fp_str) if fp_str else None
+
+    rows.append({
+        "description": desc or f"Entry {line_num - 1}",
+        "employee_amount": emp_amt,
+        "employer_amount": er_amt,
+        "loan_amount": loan_amt,
+        "due_date": due,
+        "deposit_date": dep,
+        "final_payment_date": fp,
+    })
+    return rows, errors
+
+
+def _excel_number_to_date(n: float) -> date:
+    """Convert an Excel serial date number to a Python date."""
+    # Excel epoch is 1899-12-30 (with the Lotus 1-2-3 bug where 1900 is treated as a leap year)
+    if n < 0:
+        raise ValueError("Negative date number")
+    # Handle the 1900 leap year bug: Excel thinks 1900-02-29 exists (serial 60)
+    if n > 59:
+        n += 1  # Skip the phantom Feb 29, 1900
+    return (date(1899, 12, 30) + timedelta(days=int(n)))
+
+
 def build_result_csv(results: list[dict], errors: list[str]) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -580,10 +715,10 @@ HTML_TEMPLATE = """
                    ondragleave="this.classList.remove('dragover')"
                    ondrop="handleDrop(event)">
                 <div class="icon">📁</div>
-                <p class="mb-1 text-muted">Drag &amp; drop a CSV file here, or click to browse</p>
-                <p class="mb-0 text-muted" style="font-size:0.78rem;">Accepts .csv files</p>
+                <p class="mb-1 text-muted">Drag &amp; drop a CSV or Excel file here, or click to browse</p>
+                <p class="mb-0 text-muted" style="font-size:0.78rem;">Accepts .csv, .xlsx, and .xls files</p>
               </div>
-              <input type="file" id="csv-input" accept=".csv" class="d-none" onchange="handleFile(this.files[0])">
+              <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" class="d-none" onchange="handleFile(this.files[0])">
 
               <div id="bulk-preview-section" style="display:none;" class="mt-3">
                 <div class="section-title">Preview (<span id="bulk-count">0</span> entries)</div>
@@ -800,15 +935,37 @@ HTML_TEMPLATE = """
     }
 
     function handleFile(file) {
-      if (!file || !file.name.endsWith(".csv")) {
-        showToast('Please upload a .csv file.');
+      if (!file) return;
+      const name = file.name.toLowerCase();
+      if (!name.endsWith('.csv') && !name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+        showToast('Please upload a .csv, .xlsx, or .xls file.');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        parseBulkCSV(e.target.result);
-      };
-      reader.readAsText(file);
+      if (name.endsWith('.csv')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          parseBulkCSV(e.target.result);
+        };
+        reader.readAsText(file);
+      } else {
+        // Excel files: send as binary FormData
+        const formData = new FormData();
+        formData.append('file', file);
+        validateExcelUpload(formData);
+      }
+    }
+
+    async function validateExcelUpload(formData) {
+      try {
+        const res = await fetch('/api/bulk/validate', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) { showToast(data.error); return; }
+        bulkEntries = data.valid_entries;
+        bulkErrors = data.errors;
+        renderBulkPreview(data);
+      } catch (err) {
+        showToast('Failed to parse Excel file: ' + err.message);
+      }
     }
 
     async function parseBulkCSV(text) {
@@ -1067,15 +1224,19 @@ async def bulk_template():
 
 @app.post("/api/bulk/validate")
 async def bulk_validate(file: UploadFile = File(...)):
-    if not file.filename.endswith(".csv"):
-        return JSONResponse(status_code=400, content={"error": "File must be a .csv"})
+    fname = (file.filename or "").lower()
+    if not (fname.endswith(".csv") or fname.endswith(".xlsx") or fname.endswith(".xls")):
+        return JSONResponse(status_code=400, content={"error": "File must be a .csv, .xlsx, or .xls file"})
     content = await file.read()
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError:
-        text = content.decode("latin-1")
 
-    rows, errors = parse_csv_rows(text)
+    if fname.endswith(".csv"):
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            text = content.decode("latin-1")
+        rows, errors = parse_csv_rows(text)
+    else:
+        rows, errors = parse_excel_rows(content, file.filename)
 
     return {
         "valid_entries": [
