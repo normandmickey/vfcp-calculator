@@ -1103,6 +1103,19 @@ HTML_TEMPLATE = """
           html += '</tbody></table></div>';
         }
 
+        // Self-correction eligibility check (2025 VFCP Final Rule)
+        var scEligible = r.lost_earnings < 1000 && r.contribution_type !== 'employer';
+        if (scEligible) {
+          html += '<div class="mt-2 p-2" style="background:#e6f9ed;border:1px solid #86efac;border-radius:8px;font-size:0.82rem;">'
+            + '<strong style="color:#166534;">&#9989; May Qualify for VFCP Self-Correction</strong><br>'
+            + '<span class="text-muted">Under the January 2025 VFCP final rule, late deposits with lost earnings under $1,000 may be self-corrected without a formal VFCP filing. Must be corrected within 180 days. Eligible for excise tax relief under amended PTE 2002-51. '
+            + '<a href="/how-it-works" style="color:#166534;">Learn more &rarr;</a></span></div>';
+        } else if (r.lost_earnings >= 1000) {
+          html += '<div class="mt-2 p-2" style="background:#fef9ee;border:1px solid #fde68a;border-radius:8px;font-size:0.82rem;">'
+            + '<strong style="color:#92400e;">&#9888; Formal VFCP Filing Likely Required</strong><br>'
+            + '<span class="text-muted">Lost earnings of $1,000 or more exceed the self-correction threshold. A formal VFCP application through EBSA is typically needed. '
+            + '<a href="/how-it-works" style="color:#92400e;">Learn more &rarr;</a></span></div>';
+        }
         html += '<div class="text-end fw-bold" style="font-size:0.9rem;">Lost Earnings: ' + fmt(r.lost_earnings) + '</div></div>';
       }
 
@@ -1514,6 +1527,41 @@ async def how_it_works():
         or designating a responsible party to monitor deposit deadlines.</div>
       </div>
 
+      <h3>Two Correction Pathways (2025 Final Rule)</h3>
+      <p>
+        The DOL's January 2025 final rule created a new <strong>self-correction</strong> feature
+        alongside the traditional formal filing process. Plan sponsors now have <strong>two options</strong>
+        for correcting late deposits of participant contributions and loan repayments:
+      </p>
+      <div class="example-box">
+        <div class="step"><strong>Option A — Formal VFCP Filing</strong><br>
+        The traditional process described above. File a full application through VFCP Online,
+        and if approved, receive a <strong>No-Action Letter</strong> from EBSA. This is required when
+        self-correction criteria are not met (e.g., lost earnings exceed $1,000, or the correction
+        period exceeds 180 days), or for violation types not covered by self-correction.</div>
+        <div class="step"><strong>Option B — Self-Correction (New in 2025)</strong><br>
+        Available for late deposits of <em>participant contributions</em> and <em>loan repayments</em>
+        when all of the following criteria are met:
+          <ul style="margin-top:0.5rem;">
+            <li><strong>Lost earnings</strong> on the principal portion are <strong>less than $1,000</strong></li>
+            <li><strong>Delinquent amounts are remitted within 180 calendar days</strong> of withholding
+                or receipt by the employer</li>
+            <li>The plan and plan sponsor are <strong>not under investigation</strong> by EBSA
+                (except for EPCRS-eligible plan loan failures, which may still qualify)</li>
+            <li>The correction includes <strong>both the principal and lost earnings</strong></li>
+          </ul>
+          Under self-correction, the sponsor receives an <strong>acknowledgment email</strong> from EBSA
+          (not a No-Action Letter). There is <strong>no limit on frequency</strong> of use. However,
+          delinquent contributions must still be reported on the plan's annual <strong>Form 5500</strong>.
+        </div>
+      </div>
+      <p>
+        Self-correction also applies to certain <strong>plan loan failures</strong> that are eligible
+        for correction under the IRS's <em>Employee Plans Compliance Resolution System (EPCRS)</em>,
+        including failures involving the loan amount, duration, level amortization, or loans that
+        defaulted due to a failure to withhold repayments from wages.
+      </p>
+
       <h3>Filing Requirements &amp; Deadlines</h3>
       <ul>
         <li><strong>Filing method:</strong> All VFCP applications must be submitted electronically
@@ -1523,10 +1571,12 @@ async def how_it_works():
             encourages filing <strong>as soon as possible</strong> after discovering the violation.
             Delays may affect the agency's willingness to accept the filing, especially if the
             DOL has already initiated an investigation.</li>
-        <li><strong>No-filing threshold:</strong> For certain late deposit violations, the DOL
-            allows corrections <strong>without filing</strong> if the total lost earnings for
-            all affected participants for a given plan year are below a de minimis threshold.
-            However, participants must still be notified and made whole.</li>
+        <li><strong>Self-correction notice:</strong> Under the 2025 final rule, eligible late deposits
+            (lost earnings &lt; $1,000 and corrected within 180 days) may be self-corrected by
+            submitting a <strong>Self-Correction Notice</strong> to EBSA, which requires the plan name,
+            employer EIN, plan number, correction amounts, dates, and number of participants affected.
+            The sponsor must also complete a Record Retention Checklist with a penalty of perjury statement.
+            Participants must still be notified and made whole.</li>
         <li><strong>Correction completion:</strong> All corrective actions — including deposit of
             contributions, lost earnings, and participant notification — must be completed
             <strong>before</strong> filing the VFCP application.</li>
@@ -1755,6 +1805,16 @@ async def how_it_works():
           <a href="https://www.dol.gov/agencies/ebsa/workers-and-families/fiduciaries-and-plan-administrators/voluntary-fiduciary-correction-program" target="_blank">
           https://www.dol.gov/.../voluntary-fiduciary-correction-program</a><br>
           <span class="text-muted">The DOL's own online lost earnings calculator for reference.</span>
+        </li>
+        <li class="mt-2">&#128196; <strong>2025 VFCP Final Rule — Self-Correction</strong><br>
+          <a href="https://www.federalregister.gov/documents/2025/01/15/2025-00327/voluntary-fiduciary-correction-program" target="_blank">
+          Federal Register: 89 FR 2836</a><br>
+          <span class="text-muted">The January 14, 2025 final rule creating the VFCP self-correction feature for late deposits and plan loan failures.</span>
+        </li>
+        <li class="mt-2">&#128196; <strong>PTE 2002-51 Amendment</strong><br>
+          <a href="https://www.federalregister.gov/documents/2025/01/15/2025-00328/prohibited-transaction-exemption-pte-2002-51-to-permit-certain-transactions-identified-in-the" target="_blank">
+          Federal Register: 89 FR 2898</a><br>
+          <span class="text-muted">Amendment extending excise tax relief to self-corrections and expanding coverage to six new transaction types.</span>
         </li>
         <li class="mt-2">&#128196; <strong>ERISA &sect; 404 — Fiduciary Duties</strong><br>
           <a href="https://www.law.cornell.edu/uscode/text/29/1104" target="_blank">
