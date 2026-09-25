@@ -577,6 +577,16 @@ def build_result_csv(results: list[dict], errors: list[str]) -> str:
     total = round(sum(r["lost_earnings"] for r in results), 2)
     writer.writerow([])
     writer.writerow(["TOTAL", sum(r["amount"] for r in results), "", "", "", "", sum(r["days_late"] for r in results) // len(results) if results else 0, total])
+    excluded = []
+    for r in results:
+        missing = [m["month"] for m in r.get("breakdown", []) if m.get("rate") is None]
+        if missing:
+            excluded.append((r.get("description") or "Entry") + ": no published DOL rate for " + ", ".join(missing) + " (months excluded, lost earnings understated)")
+    if excluded:
+        writer.writerow([])
+        writer.writerow(["--- INCOMPLETE: MONTHS EXCLUDED ---"])
+        for w in excluded:
+            writer.writerow([w])
     if errors:
         writer.writerow([])
         writer.writerow(["--- ERRORS ---"])
@@ -1064,6 +1074,12 @@ HTML_TEMPLATE = """
       return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function prettyMonth(ym) {
+      var names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var p = ym.split('-');
+      return names[parseInt(p[1], 10) - 1] + ' ' + p[0];
+    }
+
     function renderResults(data) {
       const section = document.getElementById('results-section');
       const content = document.getElementById('results-content');
@@ -1073,6 +1089,8 @@ HTML_TEMPLATE = """
       var html = '<div class="summary-box mb-4 text-center"><div class="label">Total Lost Earnings</div>' +
         '<div class="value">' + fmt(data.total_lost_earnings) + '</div>' +
         '<div class="mt-1" style="font-size:0.85rem;">across ' + data.results.length + ' contribution' + (data.results.length > 1 ? 's' : '') + ' &middot; Simple Interest</div></div>';
+
+      var excludedMonths = [];
 
       for (const r of data.results) {
         var typeLabel = r.contribution_label || (r.contribution_type === 'employer' ? 'Employer Match' : r.contribution_type === 'loan' ? 'Loan Repayment' : 'Employee Deferral');
@@ -1091,17 +1109,28 @@ HTML_TEMPLATE = """
             '<span class="badge bg-warning text-dark">' + r.days_late + ' days</span>' +
           '</span>';
 
+        var noRate = [];
         if (r.breakdown.length > 0) {
           html += '<div class="month-detail mt-2"><table class="table table-sm table-bordered results-table">' +
             '<thead><tr><th>Month</th><th>Rate %</th><th>Days</th><th>Factor</th><th>Start Bal</th><th>Earnings</th><th>End Bal</th></tr></thead><tbody>';
           for (var j = 0; j < r.breakdown.length; j++) {
             var m = r.breakdown[j];
+            if (m.rate == null) {
+              noRate.push(m.month);
+              if (excludedMonths.indexOf(m.month) === -1) excludedMonths.push(m.month);
+            }
             var rateStr = m.rate != null ? m.rate.toFixed(2) + '%' : 'N/A';
             var noteStr = m.note ? ' <span class="text-muted">(' + m.note + ')</span>' : '';
             var factorStr = m.factor != null ? m.factor.toFixed(6) : '—';
             html += '<tr><td>' + m.month + '</td><td>' + rateStr + noteStr + '</td><td>' + m.days + '</td><td>' + factorStr + '</td><td>' + fmt(m.beginning_balance) + '</td><td class="text-danger fw-semibold">' + fmt(m.earnings) + '</td><td>' + fmt(m.ending_balance) + '</td></tr>';
           }
           html += '</tbody></table></div>';
+        }
+
+        if (noRate.length > 0) {
+          html += '<div class="mt-2 p-2" style="background:#fef9ee;border:1px solid #fde68a;border-radius:8px;font-size:0.82rem;">'
+            + '<strong style="color:#92400e;">&#9888; Incomplete &mdash; Months Excluded (No Published Rate)</strong><br>'
+            + '<span class="text-muted">The DOL has not published a rate for ' + noRate.map(prettyMonth).join(', ') + '. Those months contribute $0 here &mdash; this entry total is understated until rates are added.</span></div>';
         }
 
         // Self-correction eligibility check (2025 VFCP Final Rule)
@@ -1120,6 +1149,11 @@ HTML_TEMPLATE = """
         html += '<div class="text-end fw-bold" style="font-size:0.9rem;">Lost Earnings: ' + fmt(r.lost_earnings) + '</div></div>';
       }
 
+      if (excludedMonths.length > 0) {
+        html = '<div class="card p-3 mb-4" style="background:#fef9ee;border:1px solid #fde68a;">'
+          + '<strong style="color:#92400e;">&#9888; Incomplete Result &mdash; ' + excludedMonths.length + ' month' + (excludedMonths.length > 1 ? 's' : '') + ' excluded</strong><br>'
+          + '<span class="text-muted" style="font-size:0.85rem;">No published DOL interest rate for ' + excludedMonths.map(prettyMonth).join(', ') + '. Those months were skipped (not estimated), so the total below is understated. Recalculate once rates are published.</span></div>' + html;
+      }
       content.innerHTML = html;
     }
 
