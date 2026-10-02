@@ -617,12 +617,12 @@ HTML_TEMPLATE = """
   <meta name="description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
   <meta name="keywords" content="VFCP calculator, lost earnings, DOL, ERISA, 401k, 403b, late contribution, fiduciary correction, Department of Labor, retirement plan">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="">
+  <link rel="canonical" href="https://vfcp-calculator.saasclaw.ai/">
   <meta property="og:title" content="VFCP Lost Earnings Calculator">
   <meta property="og:description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="VFCP Lost Earnings Calculator">
-  <meta property="og:url" content="/">
+  <meta property="og:url" content="https://vfcp-calculator.saasclaw.ai/">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="VFCP Lost Earnings Calculator">
   <meta name="twitter:description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
@@ -635,6 +635,13 @@ HTML_TEMPLATE = """
     "operatingSystem": "All",
     "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
   }</script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+    {"@type": "Question", "name": "What is the VFCP?", "acceptedAnswer": {"@type": "Answer", "text": "A U.S. Department of Labor (EBSA) program that lets plan officials voluntarily correct ERISA violations — such as late deposits of participant 401(k) or 403(b) contributions — and avoid DOL enforcement actions and civil penalties."}},
+    {"@type": "Question", "name": "How are VFCP lost earnings calculated?", "acceptedAnswer": {"@type": "Answer", "text": "Interest owed on each delinquent contribution from the date it should have been deposited to the correction (recovery) date, computed with the DOL's published interest rates — individually or in bulk via CSV/Excel."}},
+    {"@type": "Question", "name": "Is this the official DOL calculator?", "acceptedAnswer": {"@type": "Answer", "text": "No. This is an independent calculator built on the official DOL interest rates and methodology. For actual VFCP filings, use the DOL's VFCP Online Calculator at askebsa.dol.gov."}},
+    {"@type": "Question", "name": "Do I still owe the IRS excise tax?", "acceptedAnswer": {"@type": "Answer", "text": "Usually, yes. Late deposits of employee deferrals trigger a 15% excise tax reported on IRS Form 5330, separate from the VFCP correction made with the Department of Labor."}},
+    {"@type": "Question", "name": "What is the VFCP self-correction component?", "acceptedAnswer": {"@type": "Answer", "text": "Since 2025, eligible late participant contributions can be corrected under the VFCP Self-Correction Component without a formal VFCP filing; this calculator flags when a correction may qualify."}}
+  ]}</script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/js/bootstrap.bundle.min.js"></script>
   <style>
@@ -796,7 +803,22 @@ HTML_TEMPLATE = """
 
   </main>
 
-  <footer class="py-4 mt-4" style="background: #1a3a5c; color: #fff;">
+    <section class="container py-4" id="faq">
+    <h2 class="h4 mb-3">VFCP Lost Earnings — Frequently Asked Questions</h2>
+    <h3 class="h6 mt-3">What is the VFCP?</h3>
+    <p class="small text-muted">The Voluntary Fiduciary Correction Program is a U.S. Department of Labor (EBSA) program that lets plan officials voluntarily correct ERISA violations — such as late deposits of participant 401(k) or 403(b) contributions — and avoid DOL enforcement actions and civil penalties.</p>
+    <h3 class="h6 mt-3">How are lost earnings calculated?</h3>
+    <p class="small text-muted">Lost earnings are interest owed on each delinquent contribution from the date it should have been deposited to the correction (recovery) date, computed with the DOL&rsquo;s published interest rates. This calculator applies those official rates period by period and produces the correction amount — for a single late deposit or in bulk via CSV/Excel.</p>
+    <h3 class="h6 mt-3">Is this the official DOL calculator?</h3>
+    <p class="small text-muted">No. This is an independent calculator built on the official DOL interest rates and methodology. For actual VFCP filings, use the DOL&rsquo;s VFCP Online Calculator at askebsa.dol.gov.</p>
+    <h3 class="h6 mt-3">Do I still owe the IRS excise tax?</h3>
+    <p class="small text-muted">Usually, yes. Late deposits of employee deferrals trigger a 15% excise tax reported on IRS Form 5330 — that filing is separate from the VFCP correction you make with the Department of Labor.</p>
+    <h3 class="h6 mt-3">What is the VFCP self-correction component?</h3>
+    <p class="small text-muted">Since 2025, eligible late participant contributions can be corrected under the VFCP Self-Correction Component without filing a formal VFCP application. This calculator flags when a correction may qualify — confirm the DOL&rsquo;s SCC conditions with your own counsel before relying on it.</p>
+    <p class="small text-muted mt-3">Educational tool — not legal, tax, or investment advice.</p>
+  </section>
+
+<footer class="py-4 mt-4" style="background: #1a3a5c; color: #fff;">
     <div class="container">
       <div class="row">
         <div class="col-md-4">
@@ -1417,7 +1439,7 @@ async def how_it_works():
   <meta name="description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
   <meta name="keywords" content="VFCP calculator, lost earnings, DOL, ERISA, 401k, 403b, late contribution, fiduciary correction, Department of Labor, retirement plan">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="">
+  <link rel="canonical" href="https://vfcp-calculator.saasclaw.ai/how-it-works">
   <meta property="og:title" content="How Lost Earnings Are Calculated — VFCP Calculator">
   <meta property="og:description" content="Free VFCP Lost Earnings Calculator for DOL Voluntary Fiduciary Correction Program. Calculate lost earnings on late 401(k), 403(b), and plan contributions using official DOL interest rates.">
   <meta property="og:type" content="website">
@@ -1872,17 +1894,22 @@ async def how_it_works():
 </html>"""
 
 
+@app.get("/e86d199f43d9325a2ba0a93a83a36907.txt", response_class=HTMLResponse)
+async def indexnow_key():
+    return "e86d199f43d9325a2ba0a93a83a36907"
+
+
 @app.get("/robots.txt", response_class=HTMLResponse)
 async def robots():
-    return "User-agent: *\nAllow: /\n\nSitemap: /sitemap.xml"
+    return "User-agent: *\nAllow: /\n\nSitemap: https://vfcp-calculator.saasclaw.ai/sitemap.xml"
 
 
 @app.get("/sitemap.xml", response_class=HTMLResponse)
 async def sitemap():
     return """<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>/</loc><priority>1.0</priority></url>
-  <url><loc>/how-it-works</loc><priority>0.8</priority></url>
+  <url><loc>https://vfcp-calculator.saasclaw.ai/</loc><priority>1.0</priority></url>
+  <url><loc>https://vfcp-calculator.saasclaw.ai/how-it-works</loc><priority>0.8</priority></url>
 </urlset>"""
 
 
